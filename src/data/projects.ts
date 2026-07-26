@@ -4,7 +4,7 @@ export const projectsData: Project[] = [
   {
     id: 1,
     title: "TicketBox — Event Ticketing Platform",
-    category: "backend",
+    category: "commerce",
     tags: ["Next.js", "NestJS", "PostgreSQL", "Redis", "BullMQ", "React Native"],
     description: "An Event-Driven Modular Monolith ticketing system handling high concurrency and offline-first mobile check-ins.",
     contributions: [
