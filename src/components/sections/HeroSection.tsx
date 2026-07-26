@@ -1,7 +1,7 @@
 import React from 'react';
 import { EyebrowTag } from '../ui/EyebrowTag';
 import { Button } from '../ui/Button';
-import { BezelCard } from '../ui/BezelCard';
+import { SharkVisualizer } from '../ui/SharkVisualizer';
 import { heroData } from '@/data/content';
 
 export const HeroSection: React.FC = () => {
@@ -27,13 +27,13 @@ export const HeroSection: React.FC = () => {
               </Button>
 
               <Button
-                href="https://github.com/datkrb"
+                href={heroData.cvLink}
                 target="_blank"
                 rel="noopener noreferrer"
                 variant="secondary"
                 icon={
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                    <path d="M5 12h14M12 5l7 7-7 7" />
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" />
                   </svg>
                 }
               >
@@ -43,38 +43,9 @@ export const HeroSection: React.FC = () => {
 
           </div>
 
-          {/* Hero Doppelrand Code Window */}
+          {/* Hero Doppelrand Deep Sea Shark */}
           <div className="hero-visual reveal-on-scroll" style={{ transitionDelay: '0.2s' }}>
-            <BezelCard innerClassName="code-window-card">
-              <div className="code-window-header">
-                <span className="window-dot window-dot-red" />
-                <span className="window-dot window-dot-yellow" />
-                <span className="window-dot window-dot-green" />
-                <span style={{ marginLeft: '0.5rem', color: 'var(--text-tertiary)', fontSize: '0.75rem' }}>
-                  {heroData.codeWindow.title}
-                </span>
-              </div>
-              <pre className="code-content">
-                <code>
-                  <span className="code-comment">{heroData.codeWindow.comment}</span>{'\n'}
-                  <span className="code-keyword">const</span> <span className="code-function">{heroData.codeWindow.name}</span> = {'{\n'}
-                  {'  '}name: <span className="code-string">&quot;{heroData.codeWindow.name}&quot;</span>,{'\n'}
-                  {'  '}handle: <span className="code-string">&quot;{heroData.codeWindow.handle}&quot;</span>,{'\n'}
-                  {'  '}role: <span className="code-string">&quot;{heroData.codeWindow.role}&quot;</span>,{'\n'}
-                  {'  '}stack: [{heroData.codeWindow.stack.map((s, i) => <React.Fragment key={i}><span className="code-string">&quot;{s}&quot;</span>{i < heroData.codeWindow.stack.length - 1 ? ', ' : ''}</React.Fragment>)}],{'\n'}
-                  {'  '}repos: [{'\n'}
-                  {heroData.codeWindow.repos.map((repo, idx) => (
-                    <React.Fragment key={idx}>
-                      {'    '}<span className="code-string">&quot;{repo}&quot;</span>{idx < heroData.codeWindow.repos.length - 1 ? ',' : ''}{'\n'}
-                    </React.Fragment>
-                  ))}
-                  {'  '}],{'\n'}
-                  {'  '}availability: <span className="code-string">&quot;{heroData.codeWindow.availability}&quot;</span>{'\n'}
-                  {'}'};{'\n\n'}
-                  <span className="code-keyword">export default</span> {heroData.codeWindow.name};
-                </code>
-              </pre>
-            </BezelCard>
+            <SharkVisualizer />
           </div>
 
         </div>

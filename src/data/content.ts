@@ -2,16 +2,17 @@ import { SkillCategoryData } from '@/types';
 
 export const heroData = {
   tagline: "Available for Software Engineer Internships 2026",
-  titlePart1: "Full-Stack ",
-  titleHighlight: "Software",
-  titlePart2: " Engineer.",
-  description: "Hi, I'm Dat Nguyen Ha  — a final-year Software Engineering student at University of Science (HCMUS) — VNU, I am seeking internship positions in Software Engineer, Full-stack Engineer, Frontend Engineer and Backend Engineer",
+  titlePart1: "Hi, I'm ",
+  titleHighlight: "Nguyen Ha Dat",
+  titlePart2: ".",
+  description: "A Software Engineering student at HCMUS - VNU, eager to build end-to-end applications with high-quality user experiences and explore how things work under the hood.",
   primaryButton: "View My Projects",
-  secondaryButton: "My Github @datkrb",
+  secondaryButton: "Download My CV",
+  cvLink: "/CV.pdf", // Đặt file CV vào thư mục public/ với tên CV_Nguyen Ha Dat.pdf
   codeWindow: {
     title: "datkrb_profile.ts",
     comment: "// Software Engineer Intern — Verified GitHub Data",
-    name: "Dat Nguyen",
+    name: "Nguyen Ha Dat",
     handle: "@datkrb",
     role: "Software Engineer Intern",
     stack: ["TypeScript", "Kotlin", "Docker", "JavaScript"],
@@ -26,9 +27,42 @@ export const heroData = {
 };
 
 export const aboutData = {
-  tagline: "Technical Specialization",
-  title: "Full-Stack Web Development.",
-  description: "I specialize in building full-stack web applications with modern JavaScript/TypeScript ecosystems. I also have foundational knowledge in native Android app development using Kotlin. My GitHub repositories include a real-time Chinese Chess platform (xiang-qi), a restaurant management system (Smart-Restaurant), an event ticketing platform (TicketBox), and a food ordering Android app (ResFood-App)."
+  tagline: "About Me",
+
+  // ====== THÔNG TIN CÁ NHÂN — Sửa ở đây ======
+  name: "Nguyen Ha Dat" ,
+  avatar: "/avatar.jpg", // Đặt ảnh đại diện vào thư mục public/ với tên avatar.jpg
+  role: "Full-Stack Software Engineer",
+  location: "Ho Chi Minh City, Vietnam",
+  availability: "Open for Internship 2026",
+
+  // ====== GIỚI THIỆU KỸ THUẬT — Sửa ở đây ======
+  bio: "I've worked with Node.js, Express, NestJS, and TypeScript to build RESTful APIs, real-time features with WebSockets, and handled challenges like concurrency control with locking mechanisms. I'm comfortable with PostgreSQL, MongoDB, Redis, and Docker for containerized deployments.",
+  bioExtra: "On the frontend, I build responsive interfaces using React and Next.js. I also have experience developing a native Android app with Kotlin, giving me a broader perspective on how users interact with software across platforms.",
+  bioThird: "Currently, I'm diving deeper into design systems, DevOps practices, and CI/CD pipelines — always looking to improve my workflow and grow as an engineer.",
+
+  // ====== SỐ LIỆU NỔI BẬT — Sửa ở đây ======
+  stats: [
+    { value: "4+", label: "Projects Built" },
+    { value: "2+", label: "Years Coding" },
+    { value: "6+", label: "Technologies" },
+    { value: "3.43", label: "GPA / 4.0" },
+  ],
+
+  // ====== LIÊN KẾT MẠNG XÃ HỘI — Sửa ở đây ======
+  socials: [
+    { platform: "GitHub", url: "https://github.com/datkrb", icon: "github" },
+    { platform: "LinkedIn", url: "https://www.linkedin.com/in/nhdat205/", icon: "linkedin" },
+    { platform: "Email", url: "mailto:nguyenhadatkrb2k5@gmail.com", icon: "email" },
+  ],
+
+  // ====== ĐIỂM NỔI BẬT — Sửa ở đây ======
+  highlights: [
+    { icon: "🎓", text: "B.S. Software Engineering — HCMUS" },
+    { icon: "💻", text: "Backend & Frontend Web Development" },
+    { icon: "🐳", text: "Docker & DevOps Practice" },
+    { icon: "🌐", text: "English: TOEIC 765" },
+  ],
 };
 
 export const projectsSectionData = {
@@ -51,18 +85,18 @@ export const skillsData = {
       title: "Frontend ",
       icon: "💻",
       skills: ["React / Next.js", "HTML5 & CSS3", "TailwindCSS"],
-      familiar: [""]
+      familiar: []
     },
     {
       title: "Backend & Database",
       icon: "⚙️",
-      skills: ["Node.js", "Express", "NestJS", "Redis", "Socket.io", "SQL(MySQL/PostgreSQL)", "NoSQL(MongoDB)"],
-      familiar: []
+      skills: ["Node.js", "Express", "NestJS", "Prisma","JWT","Restful API", "Redis", "Socket.io", "SQL(MySQL/PostgreSQL)"],
+      familiar: ["NoSQL(MongoDB)", "Firebase", "SpringBoot", "RabbitMQ"]
     },
     {
       title: "Tools & Workflow",
       icon: "🛠️",
-      skills: ["Git / GitHub ", "Docker", "Postman API Testing", "Vite / Vercel"],
+      skills: ["Git / GitHub ", "Docker", "Postman API Testing", "Vite / Vercel", "WSL"],
     },
     {
       title: "Soft Skills",
@@ -74,7 +108,7 @@ export const skillsData = {
 
 export const educationData = {
   tagline: "Academic Background",
-  title: "Education & Background",
+  title: "Education & Certificates",
   degree: "B.S. in Software Engineering",
   university: "University of Science - HCMUS",
   period: "2022 — 2027 (Expected Graduation)",
@@ -90,8 +124,7 @@ export const certificatesData = {
     {
       title: "Toeic 765 LR",
       date: "May 2026",
-      description: "Description of the certificate",
-      link: "#"
+      description: "Achieved a score of 765/990, demonstrating professional working proficiency in English."
     },
   ]
 };
@@ -132,7 +165,7 @@ export const navbarData = {
 };
 
 export const footerData = {
-  title: "Dat Nguyen (@datkrb) — Full-Stack Web Developer",
-  copyright: "© 2026 Dat Nguyen. Built with High-End Visual Design & 100/100 SEO Standard.",
+  title: "Nguyen Ha Dat",
+  copyright: "© 2026 Nguyen Ha Dat.",
   githubLinkText: "GitHub @datkrb"
 };
