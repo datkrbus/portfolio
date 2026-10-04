@@ -1,26 +1,49 @@
-import type { AppData, Category, Settings } from './todo-types';
+import type { AppData, Category, Settings } from "./todo-types";
 
-export const DATA_KEY = 'datkrbus-todo-app';
-export const SESSION_KEY = 'datkrbus-todo-session';
+export const DATA_KEY = "datkrbus-todo-app";
+export const SESSION_KEY = "datkrbus-todo-session";
 
 export const defaultCategories = (userId: string): Category[] => [
-  { id: crypto.randomUUID(), userId, name: 'Personal', color: '#e8643f', icon: '●' },
-  { id: crypto.randomUUID(), userId, name: 'Work', color: '#4477b9', icon: '◆' },
-  { id: crypto.randomUUID(), userId, name: 'Study', color: '#8a68ba', icon: '▲' },
+  {
+    id: crypto.randomUUID(),
+    userId,
+    name: "Personal",
+    color: "#e76f8f",
+    icon: "●",
+  },
+  {
+    id: crypto.randomUUID(),
+    userId,
+    name: "Work",
+    color: "#2a9d8f",
+    icon: "◆",
+  },
+  {
+    id: crypto.randomUUID(),
+    userId,
+    name: "Study",
+    color: "#f28482",
+    icon: "▲",
+  },
 ];
 
 export const defaultSettings = (userId: string): Settings => ({
   userId,
-  theme: 'system',
-  firstDay: 'monday',
-  timeFormat: '24',
-  defaultView: 'month',
+  theme: "system",
+  firstDay: "monday",
+  timeFormat: "24",
+  defaultView: "month",
   defaultDuration: 30,
-  workingStart: '08:00',
-  workingEnd: '18:00',
+  workingStart: "08:00",
+  workingEnd: "18:00",
 });
 
-export const emptyData: AppData = { users: [], categories: [], todos: [], settings: [] };
+export const emptyData: AppData = {
+  users: [],
+  categories: [],
+  todos: [],
+  settings: [],
+};
 
 export function loadData(): AppData {
   try {

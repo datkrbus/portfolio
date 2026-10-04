@@ -1,7 +1,15 @@
-export type Priority = 'none' | 'low' | 'medium' | 'high';
-export type View = 'dashboard' | 'calendar' | 'today' | 'upcoming' | 'completed' | 'statistics' | 'settings';
-export type CalendarView = 'month' | 'week' | 'day' | 'agenda';
-export type AuthMode = 'login' | 'register';
+export type Priority = "none" | "low" | "medium" | "high";
+export type TodoStatus = "todo" | "in_progress" | "review" | "done";
+export type View =
+  | "dashboard"
+  | "calendar"
+  | "today"
+  | "upcoming"
+  | "completed"
+  | "statistics"
+  | "settings";
+export type CalendarView = "month" | "week" | "day" | "agenda";
+export type AuthMode = "login" | "register";
 
 export type User = {
   id: string;
@@ -29,7 +37,7 @@ export type Reminder = {
 };
 
 export type Recurrence = {
-  frequency: 'daily' | 'weekly' | 'monthly' | 'yearly' | 'custom';
+  frequency: "daily" | "weekly" | "monthly" | "yearly" | "custom";
   interval: number;
   days?: number[];
   until?: string;
@@ -47,6 +55,7 @@ export type Todo = {
   priority: Priority;
   categoryId: string;
   completed: boolean;
+  status?: TodoStatus;
   completedAt?: string;
   reminder?: Reminder;
   recurrence?: Recurrence;
@@ -59,9 +68,9 @@ export type Todo = {
 
 export type Settings = {
   userId: string;
-  theme: 'light' | 'dark' | 'system';
-  firstDay: 'monday' | 'sunday';
-  timeFormat: '12' | '24';
+  theme: "light" | "dark" | "system";
+  firstDay: "monday" | "sunday";
+  timeFormat: "12" | "24";
   defaultView: CalendarView;
   defaultDuration: number;
   workingStart: string;

@@ -1,3 +1,26 @@
+# UX Direction — Notion-inspired Workspace
+
+The Todo app should feel like a calm personal workspace rather than a marketing dashboard.
+
+UI rules:
+
+- Use a persistent, quiet sidebar for navigation, categories, settings, and the primary New Todo action.
+- Treat each view as a page with a clear title, breadcrumb-like context, and a generous content canvas.
+- Do not show a global filter bar at the top of Dashboard. Dashboard is for orientation and upcoming work, not configuration.
+- Put Filter, Sort, and View controls in the toolbar of the relevant Calendar, Agenda, Upcoming, or Completed view.
+- Keep search in the page header because it searches the whole workspace; keep filters contextual to the current view.
+- Prefer inline rows, simple database-like lists, and compact borders over decorative metric cards and gradients.
+- Dashboard should contain only the page title, quick add, and the task board; no summary metric cards and no global filter strip.
+- The default Dashboard uses a simple Board view: four status columns, compact task cards, drag between columns, and a quick completion checkbox.
+- Status colors are fixed by workflow state; category colors are used only for category dots or labels and must never color the status columns.
+- Use progressive disclosure: advanced Todo fields, reminders, recurrence, and subtasks belong in the Todo detail modal.
+- Keep empty states quiet and useful, with one clear next action.
+- Preserve keyboard focus, visible hover states, and clear active navigation states.
+- On phones, use a bottom navigation bar, stack the page header and quick add, keep board columns horizontally scrollable inside the board only, and keep touch targets at least 44px.
+- Prefer mobile-first fluid layout and content-driven breakpoints; never scale the entire desktop canvas down to fit a phone.
+
+The visual reference is Notion's workspace pattern: sidebar navigation, page-level context, and database controls close to the data they modify. This is an interaction reference, not a pixel-copy requirement.
+
 # Todo Calendar Web — Full Specification
 
 ## 1. Tổng quan
@@ -1442,7 +1465,7 @@ User A không được nhìn thấy Todo của User B.
 Mọi entity phải có:
 
 ```ts
-userId
+userId;
 ```
 
 ---
@@ -1481,7 +1504,7 @@ Không dùng array index làm ID.
 Dùng:
 
 ```ts
-crypto.randomUUID()
+crypto.randomUUID();
 ```
 
 ---
@@ -1875,13 +1898,13 @@ localStorage
 Các operation:
 
 ```ts
-createTodo()
-updateTodo()
-deleteTodo()
-completeTodo()
-restoreTodo()
-moveTodo()
-duplicateTodo()
+createTodo();
+updateTodo();
+deleteTodo();
+completeTodo();
+restoreTodo();
+moveTodo();
+duplicateTodo();
 ```
 
 ---
@@ -1891,11 +1914,11 @@ duplicateTodo()
 Các operation:
 
 ```ts
-getTodosForDate()
-getTodosForWeek()
-getTodosForMonth()
-moveTodo()
-resizeTodo()
+getTodosForDate();
+getTodosForWeek();
+getTodosForMonth();
+moveTodo();
+resizeTodo();
 ```
 
 ---
@@ -2525,7 +2548,6 @@ Before coding, create the project architecture and data models. Then implement t
 Do not skip core functionality in favor of visual polish. Keep the code maintainable and avoid putting the entire application into one or two large components.
 ```
 
-
 ---
 
 # 95. Recommended Tech Stack
@@ -2830,7 +2852,7 @@ schemas/
 Ví dụ:
 
 ```ts
-todoSchema
+todoSchema;
 ```
 
 phải kiểm tra:
@@ -3065,9 +3087,9 @@ Longest streak
 Không cho component gọi trực tiếp:
 
 ```ts
-localStorage.getItem()
-localStorage.setItem()
-localStorage.removeItem()
+localStorage.getItem();
+localStorage.setItem();
+localStorage.removeItem();
 ```
 
 Từ component.
@@ -3110,15 +3132,15 @@ Repository chịu trách nhiệm truy cập data.
 Ví dụ:
 
 ```ts
-todoRepository.findByUser(userId)
+todoRepository.findByUser(userId);
 
-todoRepository.findById(todoId)
+todoRepository.findById(todoId);
 
-todoRepository.create(todo)
+todoRepository.create(todo);
 
-todoRepository.update(todoId, data)
+todoRepository.update(todoId, data);
 
-todoRepository.delete(todoId)
+todoRepository.delete(todoId);
 ```
 
 Store không cần biết data được lưu bằng localStorage hay IndexedDB.
@@ -3131,10 +3153,10 @@ Thiết kế abstraction:
 
 ```ts
 interface StorageAdapter {
-    get<T>(key: string): T | null
-    set<T>(key: string, value: T): void
-    remove(key: string): void
-    clear(): void
+  get<T>(key: string): T | null;
+  set<T>(key: string, value: T): void;
+  remove(key: string): void;
+  clear(): void;
 }
 ```
 
@@ -3752,7 +3774,7 @@ strict: true
 Không lạm dụng:
 
 ```ts
-any
+any;
 ```
 
 ## Rule 7 — Không over-engineer
