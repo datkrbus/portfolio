@@ -2,6 +2,10 @@
 
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import styles from './todo.module.css';
+import AdvancedTodoModal from './AdvancedTodoModal';
+import TimelineCalendar from './TimelineCalendar';
+import CategoryManager from './CategoryManager';
+import QuickAdd from './QuickAdd';
 import type { AppData, AuthMode, CalendarView, Category, Priority, Todo, View } from './todo-types';
 import { clearSession, defaultCategories, defaultSettings, getSession, loadData, saveData, saveSession } from './todo-storage';
 
@@ -36,6 +40,7 @@ export default function TodoApp() {
   const [showCategoryForm, setShowCategoryForm] = useState(false);
   const [categoryName, setCategoryName] = useState('');
   const [toast, setToast] = useState('');
+  const [deletedTodo, setDeletedTodo] = useState<Todo | null>(null);
 
   useEffect(() => {
     const stored = loadData();
@@ -60,11 +65,30 @@ export default function TodoApp() {
   }, []);
   useEffect(() => { if (ready) saveData(data); }, [data, ready]);
   useEffect(() => { if (!toast) return; const timer = window.setTimeout(() => setToast(''), 3500); return () => window.clearTimeout(timer); }, [toast]);
-
   const user = data.users.find((item) => item.id === userId);
   const todos = useMemo(() => data.todos.filter((todo) => todo.userId === userId), [data.todos, userId]);
   const categories = useMemo(() => data.categories.filter((category) => category.userId === userId), [data.categories, userId]);
   const settings = data.settings.find((item) => item.userId === userId);
+
+  useEffect(() => {
+    if (!ready || !userId || typeof Notification === 'undefined') return;
+    const checkReminders = () => {
+      const now = new Date();
+      todos.forEach((todo) => {
+        if (todo.completed || !todo.reminder || todo.date !== today() || !todo.startTime) return;
+        const [hours, minutes] = todo.startTime.split(':').map(Number);
+        const taskTime = new Date();
+        taskTime.setHours(hours, minutes, 0, 0);
+        const minutesUntil = Math.round((taskTime.getTime() - now.getTime()) / 60000);
+        if (minutesUntil <= todo.reminder.minutesBefore && minutesUntil >= todo.reminder.minutesBefore - 1 && Notification.permission === 'granted') {
+          new Notification(todo.title, { body: `Starts in ${todo.reminder.minutesBefore} minutes.` });
+        }
+      });
+    };
+    checkReminders();
+    const timer = window.setInterval(checkReminders, 60000);
+    return () => window.clearInterval(timer);
+  }, [ready, todos, userId]);
 
   const visibleTodos = useMemo(() => todos.filter((todo) => {
     const haystack = `${todo.title} ${todo.description} ${todo.tags.join(' ')}`.toLowerCase();
@@ -97,10 +121,22 @@ export default function TodoApp() {
     setData((current) => ({ ...current, todos: current.todos.some((item) => item.id === normalized.id) ? current.todos.map((item) => item.id === normalized.id ? normalized : item) : [normalized, ...current.todos] }));
     setSelectedTodo(null); setShowTodoForm(false); setToast('Todo saved');
   }
-  function toggleTodo(todo: Todo) { updateTodo({ ...todo, completed: !todo.completed, completedAt: !todo.completed ? new Date().toISOString() : undefined }); }
-  function deleteTodo(id: string) { setData((current) => ({ ...current, todos: current.todos.filter((todo) => todo.id !== id) })); setSelectedTodo(null); setShowTodoForm(false); setToast('Todo deleted'); }
+  function toggleTodo(todo: Todo) {
+    const completing = !todo.completed;
+    updateTodo({ ...todo, completed: completing, completedAt: completing ? new Date().toISOString() : undefined });
+    if (completing && todo.recurrence) {
+      const nextDate = todo.recurrence.frequency === 'daily' ? addDays(todo.date, todo.recurrence.interval) : todo.recurrence.frequency === 'monthly' ? addDays(todo.date, todo.recurrence.interval * 30) : addDays(todo.date, todo.recurrence.interval * 7);
+      if (!todo.recurrence.until || nextDate <= todo.recurrence.until) updateTodo({ ...todo, id: crypto.randomUUID(), date: nextDate, completed: false, completedAt: undefined, createdAt: new Date().toISOString() });
+    }
+  }
+  function deleteTodo(id: string) { const removed = todos.find((todo) => todo.id === id); setDeletedTodo(removed || null); setData((current) => ({ ...current, todos: current.todos.filter((todo) => todo.id !== id) })); setSelectedTodo(null); setShowTodoForm(false); setToast('Todo deleted'); }
+  function undoDelete() { if (!deletedTodo) return; setData((current) => ({ ...current, todos: [deletedTodo, ...current.todos] })); setDeletedTodo(null); setToast('Todo restored'); }
   function moveTodo(todo: Todo, date: string) { updateTodo({ ...todo, date }); }
+  function moveTimedTodo(todo: Todo, date: string, startTime: string, endTime: string) { updateTodo({ ...todo, date, startTime, endTime }); }
+  function quickAdd(value: string) { if (!userId) return; const time = value.match(/\b([01]?\d|2[0-3]):([0-5]\d)\b/); const date = /\btomorrow\b/i.test(value) ? addDays(today(), 1) : today(); const title = value.replace(/\btomorrow\b/ig, '').replace(/\s+at\s+([01]?\d|2[0-3]):([0-5]\d)/i, '').trim(); const startTime = time ? `${time[1].padStart(2, '0')}:${time[2]}` : '09:00'; const endTime = `${String(Math.min(23, Number(startTime.slice(0, 2)) + 1)).padStart(2, '0')}:${startTime.slice(3)}`; updateTodo({ ...blankTodo(userId, date), title, startTime, endTime, id: crypto.randomUUID(), createdAt: new Date().toISOString() }); }
   function addCategory(event: FormEvent) { event.preventDefault(); if (!categoryName.trim() || !userId) return; const category: Category = { id: crypto.randomUUID(), userId, name: categoryName.trim(), color: '#e8643f' }; setData((current) => ({ ...current, categories: [...current.categories, category] })); setCategoryName(''); setShowCategoryForm(false); setToast('Category created'); }
+  function saveCategory(category: Category) { if (!userId) return; const normalized = { ...category, userId }; setData((current) => ({ ...current, categories: current.categories.some((item) => item.id === normalized.id) ? current.categories.map((item) => item.id === normalized.id ? normalized : item) : [...current.categories, normalized] })); setToast('Category saved'); }
+  function deleteCategory(id: string) { setData((current) => ({ ...current, categories: current.categories.filter((category) => category.id !== id), todos: current.todos.map((todo) => todo.categoryId === id ? { ...todo, categoryId: '' } : todo) })); setToast('Category deleted'); }
   function exportData() { const payload = JSON.stringify({ todos, categories, settings: settings ? [settings] : [] }, null, 2); const url = URL.createObjectURL(new Blob([payload], { type: 'application/json' })); const link = document.createElement('a'); link.href = url; link.download = `todo-backup-${today()}.json`; link.click(); URL.revokeObjectURL(url); }
   function updateSettings(key: string, value: string | number) { if (!settings) return; setData((current) => ({ ...current, settings: current.settings.map((item) => item.userId === userId ? { ...item, [key]: value } : item) })); }
 
@@ -129,8 +165,8 @@ export default function TodoApp() {
         <header className={styles.topbar}><div><p className={styles.overline}>Personal workspace</p><h1>{currentTitle}</h1></div><div className={styles.topActions}><label className={styles.search}><span>⌕</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search tasks..." /></label><span className={styles.avatar}>{user.username.slice(0, 1).toUpperCase()}</span></div></header>
         <div className={styles.contentBody}>
           {view !== 'settings' && <FilterBar filter={filter} categories={categories} onChange={setFilter} />}
-          {view === 'dashboard' && <Dashboard todos={todos} activeCount={activeCount} completedCount={completedCount} onOpen={(todo) => { setSelectedTodo(todo); setShowTodoForm(true); }} onView={setView} />}
-          {view === 'calendar' && <Calendar todos={visibleTodos} cursor={cursor} calendarView={calendarView} onCursor={setCursor} onCalendarView={setCalendarView} onOpen={(todo) => { setSelectedTodo(todo); setShowTodoForm(true); }} onDrop={moveTodo} onCreate={(date) => { setSelectedTodo(blankTodo(userId, date)); setShowTodoForm(true); }} />}
+          {view === 'dashboard' && <><QuickAdd onAdd={quickAdd} /><Dashboard todos={todos} activeCount={activeCount} completedCount={completedCount} onOpen={(todo) => { setSelectedTodo(todo); setShowTodoForm(true); }} onView={setView} /></>}
+          {view === 'calendar' && (calendarView === 'week' || calendarView === 'day' ? <TimelineCalendar todos={visibleTodos} cursor={cursor} calendarView={calendarView} onCursor={setCursor} onOpen={(todo) => { setSelectedTodo(todo); setShowTodoForm(true); }} onMove={moveTimedTodo} onCreate={(date, startTime) => { setSelectedTodo({ ...blankTodo(userId, date), startTime, endTime: `${String(Number(startTime.slice(0, 2)) + 1).padStart(2, '0')}:00` }); setShowTodoForm(true); }} /> : <Calendar todos={visibleTodos} cursor={cursor} calendarView={calendarView} onCursor={setCursor} onCalendarView={setCalendarView} onOpen={(todo) => { setSelectedTodo(todo); setShowTodoForm(true); }} onDrop={moveTodo} onCreate={(date) => { setSelectedTodo(blankTodo(userId, date)); setShowTodoForm(true); }} />)}
           {view === 'today' && <TaskList title={`Today · ${formatDate(today(), { weekday: 'long', month: 'long', day: 'numeric' })}`} todos={visibleTodos.filter((todo) => todo.date === today())} categories={categories} onToggle={toggleTodo} onOpen={(todo) => { setSelectedTodo(todo); setShowTodoForm(true); }} onDelete={deleteTodo} empty="Nothing scheduled today." />}
           {view === 'upcoming' && <TaskList title="Upcoming" todos={visibleTodos.filter((todo) => todo.date >= today() && !todo.completed).sort((a, b) => a.date.localeCompare(b.date))} categories={categories} onToggle={toggleTodo} onOpen={(todo) => { setSelectedTodo(todo); setShowTodoForm(true); }} onDelete={deleteTodo} empty="Your upcoming list is clear." grouped />}
           {view === 'completed' && <TaskList title="Completed" todos={visibleTodos.filter((todo) => todo.completed)} categories={categories} onToggle={toggleTodo} onOpen={(todo) => { setSelectedTodo(todo); setShowTodoForm(true); }} onDelete={deleteTodo} empty="No completed tasks yet." />}
@@ -138,9 +174,9 @@ export default function TodoApp() {
           {view === 'settings' && <SettingsPanel settings={settings} onChange={updateSettings} onExport={exportData} onImport={(imported) => { setData((current) => ({ ...current, todos: [...current.todos.filter((todo) => todo.userId !== userId), ...imported.todos.map((todo) => ({ ...todo, userId: userId! }))], categories: [...current.categories.filter((category) => category.userId !== userId), ...imported.categories.map((category) => ({ ...category, userId: userId! }))] })); setToast('Backup imported'); }} onClear={() => { if (window.confirm('Delete all your Todo data?')) setData((current) => ({ ...current, todos: current.todos.filter((todo) => todo.userId !== userId), categories: current.categories.filter((category) => category.userId !== userId) })); }} />}
         </div>
       </section>
-      {showTodoForm && selectedTodo && <TodoModal todo={selectedTodo} categories={categories} onSave={updateTodo} onDelete={selectedTodo.id ? () => deleteTodo(selectedTodo.id) : undefined} onClose={() => { setShowTodoForm(false); setSelectedTodo(null); }} />}
-      {showCategoryForm && <div className={styles.modalBackdrop}><form className={styles.smallModal} onSubmit={addCategory}><h2>New category</h2><input autoFocus value={categoryName} onChange={(event) => setCategoryName(event.target.value)} placeholder="Category name" /><div className={styles.modalActions}><button type="button" onClick={() => setShowCategoryForm(false)}>Cancel</button><button className={styles.primaryButton}>Create</button></div></form></div>}
-      {toast && <div className={styles.toast}>{toast}</div>}
+      {showTodoForm && selectedTodo && <AdvancedTodoModal todo={selectedTodo} categories={categories} onSave={updateTodo} onDelete={selectedTodo.id ? () => deleteTodo(selectedTodo.id) : undefined} onClose={() => { setShowTodoForm(false); setSelectedTodo(null); }} />}
+      {showCategoryForm && <CategoryManager categories={categories} onSave={saveCategory} onDelete={deleteCategory} onClose={() => setShowCategoryForm(false)} />}
+      {toast && <div className={styles.toast}>{toast}{deletedTodo && toast === 'Todo deleted' && <button onClick={undoDelete}>Undo</button>}</div>}
     </main>
   );
 }
