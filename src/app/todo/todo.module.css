@@ -514,6 +514,18 @@
   background: var(--panel);
   box-shadow: 0 1px 2px rgba(15, 15, 15, 0.04);
 }
+.boardCard.priorityCardHigh {
+  border-left: 3px solid var(--orange);
+}
+.boardCard.priorityCardMedium {
+  border-left: 3px solid var(--priority-medium);
+}
+.boardCard.priorityCardLow {
+  border-left: 3px solid var(--blue);
+}
+.boardCard.priorityCardNone {
+  border-left: 3px solid var(--line);
+}
 .boardCard:hover {
   border-color: color-mix(in srgb, var(--ink) 25%, var(--line));
 }
@@ -571,14 +583,65 @@
   height: 7px;
   border-radius: 50%;
 }
-.boardCompleteButton { flex: 0 0 22px; align-self: flex-start; border: 0; padding: 2px; color: var(--muted); background: transparent; font-size: 1rem; line-height: 1; cursor: pointer; }
-.boardCompleteButton:hover { color: var(--status-done); }
-.boardCardDone .boardCompleteButton { color: var(--status-done); }
-.boardSubtasks { display: grid; gap: 3px; margin-top: 1px; color: var(--muted); font-size: 0.65rem; }
-.boardSubtasks span { display: block; overflow: hidden; font-family: var(--font-sans); font-size: 0.65rem; text-overflow: ellipsis; white-space: nowrap; }
-.boardSubtasks i { display: inline; margin-right: 5px; color: var(--status-done); font-style: normal; }
-.boardSubtaskDone { text-decoration: line-through; opacity: 0.75; }
-.boardSubtasks small { color: var(--muted); font-size: 0.6rem; }
+.priorityMeta {
+  color: var(--priority-medium);
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+.priorityCardHigh .priorityMeta {
+  color: var(--orange);
+}
+.priorityCardLow .priorityMeta {
+  color: var(--blue);
+}
+.boardCompleteButton {
+  flex: 0 0 22px;
+  align-self: flex-start;
+  border: 0;
+  padding: 2px;
+  color: var(--muted);
+  background: transparent;
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+}
+.boardCompleteButton:hover {
+  color: var(--status-done);
+}
+.boardCardDone .boardCompleteButton {
+  color: var(--status-done);
+}
+.boardSubtasks {
+  display: grid;
+  gap: 3px;
+  margin-top: 1px;
+  color: var(--muted);
+  font-size: 0.65rem;
+}
+.boardSubtasks span {
+  display: block;
+  overflow: hidden;
+  font-family: var(--font-sans);
+  font-size: 0.65rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.boardSubtasks i {
+  display: inline;
+  margin-right: 5px;
+  color: var(--status-done);
+  font-style: normal;
+}
+.boardSubtaskDone {
+  text-decoration: line-through;
+  opacity: 0.75;
+}
+.boardSubtasks small {
+  color: var(--muted);
+  font-size: 0.6rem;
+}
 .boardAddTop {
   border: 0;
   padding: 2px 0;

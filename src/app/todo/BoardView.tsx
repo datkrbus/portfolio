@@ -10,6 +10,12 @@ const columns: Array<{ id: TodoStatus; label: string }> = [
   { id: "review", label: "Đang xem xét" },
   { id: "done", label: "Hoàn tất" },
 ];
+const priorityLabels = {
+  none: "",
+  low: "Low",
+  medium: "Medium",
+  high: "High",
+} as const;
 
 export default function BoardView({
   todos,
@@ -130,9 +136,12 @@ export default function BoardView({
                     (item) => item.id === todo.categoryId,
                   );
                   const isDone = statusFor(todo) === "done";
+                  const subtasks = Array.isArray(todo.subtasks) ? todo.subtasks : [];
+                  const priorityClass =
+                    `priorityCard${todo.priority.charAt(0).toUpperCase()}${todo.priority.slice(1)}` as keyof typeof styles;
                   return (
                     <article
-                      className={`${styles.boardCard} ${isDone ? styles.boardCardDone : ""}`}
+                      className={`${styles.boardCard} ${styles[priorityClass]} ${isDone ? styles.boardCardDone : ""}`}
                       draggable
                       key={todo.id}
                       onDragStart={(event) =>
@@ -152,24 +161,48 @@ export default function BoardView({
                               {category.name}
                             </>
                           )}
+                          {priorityLabels[todo.priority] && (
+                            <b className={styles.priorityMeta}>
+                              {priorityLabels[todo.priority]}
+                            </b>
+                          )}
                         </span>
-                        {todo.subtasks.length > 0 && (
-                          <div className={styles.boardSubtasks}>
-                            {todo.subtasks.slice(0, 3).map((subtask) => (
-                              <span key={subtask.id} className={subtask.completed ? styles.boardSubtaskDone : ""}>
-                                <i>{subtask.completed ? "✓" : "·"}</i>{subtask.title}
+                        {subtasks.length > 0 && (
+                          <span className={styles.boardSubtasks}>
+                            {subtasks.slice(0, 3).map((subtask) => (
+                              <span
+                                key={subtask.id}
+                                className={
+                                  subtask.completed
+                                    ? styles.boardSubtaskDone
+                                    : ""
+                                }
+                              >
+                                <i>{subtask.completed ? "✓" : "·"}</i>
+                                {subtask.title}
                               </span>
                             ))}
-                            {todo.subtasks.length > 3 && <small>+{todo.subtasks.length - 3} more</small>}
-                          </div>
+                            {subtasks.length > 3 && (
+                              <small>+{subtasks.length - 3} more</small>
+                            )}
+                          </span>
                         )}
                       </button>
                       <button
                         className={styles.boardCompleteButton}
-                        onClick={(event) => { event.stopPropagation(); onToggle(todo); }}
-                        title={isDone ? "Mark task active" : "Mark task complete"}
-                        aria-label={isDone ? "Mark task active" : "Mark task complete"}
-                      >{isDone ? "✓" : "○"}</button>
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          onToggle(todo);
+                        }}
+                        title={
+                          isDone ? "Mark task active" : "Mark task complete"
+                        }
+                        aria-label={
+                          isDone ? "Mark task active" : "Mark task complete"
+                        }
+                      >
+                        {isDone ? "✓" : "○"}
+                      </button>
                     </article>
                   );
                 })}

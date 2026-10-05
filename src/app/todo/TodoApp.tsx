@@ -323,7 +323,11 @@ export default function TodoApp() {
       completedAt: status === "done" ? new Date().toISOString() : undefined,
     });
   }
-  function createBoardTodo(title: string, status: TodoStatus, categoryId = filter.category) {
+  function createBoardTodo(
+    title: string,
+    status: TodoStatus,
+    categoryId = filter.category,
+  ) {
     if (!userId) return;
     updateTodo({
       ...blankTodo(userId),
@@ -625,7 +629,9 @@ export default function TodoApp() {
                 todos={todos}
                 categories={categories}
                 categoryFilter={filter.category}
-                onCategoryFilterChange={(category) => setFilter({ ...filter, category })}
+                onCategoryFilterChange={(category) =>
+                  setFilter({ ...filter, category })
+                }
                 onToggle={toggleTodo}
                 onOpen={(todo) => {
                   setSelectedTodo(todo);

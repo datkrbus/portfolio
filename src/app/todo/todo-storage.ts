@@ -53,7 +53,14 @@ export function loadData(): AppData {
     return {
       users: Array.isArray(parsed.users) ? parsed.users : [],
       categories: Array.isArray(parsed.categories) ? parsed.categories : [],
-      todos: Array.isArray(parsed.todos) ? parsed.todos : [],
+      todos: Array.isArray(parsed.todos)
+        ? parsed.todos.map((todo) => ({
+            ...todo,
+            tags: Array.isArray(todo.tags) ? todo.tags : [],
+            subtasks: Array.isArray(todo.subtasks) ? todo.subtasks : [],
+            priority: todo.priority || "none",
+          }))
+        : [],
       settings: Array.isArray(parsed.settings) ? parsed.settings : [],
     };
   } catch {
