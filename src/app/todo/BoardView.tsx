@@ -136,7 +136,9 @@ export default function BoardView({
                     (item) => item.id === todo.categoryId,
                   );
                   const isDone = statusFor(todo) === "done";
-                  const subtasks = Array.isArray(todo.subtasks) ? todo.subtasks : [];
+                  const subtasks = Array.isArray(todo.subtasks)
+                    ? todo.subtasks
+                    : [];
                   const priorityClass =
                     `priorityCard${todo.priority.charAt(0).toUpperCase()}${todo.priority.slice(1)}` as keyof typeof styles;
                   return (

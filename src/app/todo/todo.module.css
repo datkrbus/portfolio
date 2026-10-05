@@ -1,10 +1,12 @@
 .app {
-  --ink: #37352f;
+  --ink: #173b59;
   --muted: #5f5d57;
-  --line: #e7e5e4;
-  --paper: #fff;
+  --line: #dce6ed;
+  --paper: #f8fbfd;
   --panel: #fff;
-  --sidebar: #f7f6f3;
+  --sidebar: #eef4f8;
+  --primary: #173b59;
+  --primary-soft: #e5eff6;
   --orange: #d96b45;
   --green: #5f9b79;
   --purple: #8d7ab8;
@@ -14,6 +16,8 @@
   --status-review: #4d91c6;
   --status-done: #5f9b79;
   --priority-medium: #8a651f;
+  --radius-soft: 4px;
+  --radius-card: 8px;
   min-height: 100dvh;
   display: flex;
   color: var(--ink);
@@ -21,12 +25,14 @@
   font-family: var(--font-sans);
 }
 .app[data-theme="dark"] {
-  --ink: #e9e8e5;
-  --muted: #c1beb7;
-  --line: #363532;
-  --paper: #191918;
-  --panel: #232321;
-  --sidebar: #20201e;
+  --ink: #e7f0f7;
+  --muted: #a9bdcc;
+  --line: #29445a;
+  --paper: #0f2233;
+  --panel: #152c40;
+  --sidebar: #0b1c2b;
+  --primary: #24577e;
+  --primary-soft: #1c3d58;
   --orange: #e18a61;
   --green: #79b08f;
   --purple: #b5a0d8;
@@ -82,17 +88,17 @@
   height: 28px;
   place-items: center;
   color: #fff;
-  background: var(--orange);
+  background: var(--primary);
   font-size: 0.85rem;
 }
 .brandAccent {
-  color: var(--orange);
+  color: var(--primary);
 }
 .newButton,
 .primaryButton {
   border: 0;
   color: #fff;
-  background: var(--ink);
+  background: var(--primary);
   font: inherit;
   font-weight: 700;
   cursor: pointer;
@@ -100,6 +106,7 @@
 .newButton {
   margin-bottom: 28px;
   padding: 13px 15px;
+  border-radius: var(--radius-soft);
   text-align: left;
 }
 .newButtonIcon {
@@ -107,7 +114,7 @@
 }
 .newButton:hover,
 .primaryButton:hover {
-  background: var(--orange);
+  background: color-mix(in srgb, var(--primary) 82%, #000);
 }
 .nav {
   display: grid;
@@ -137,7 +144,7 @@
 .navButton:hover,
 .navActive {
   color: var(--ink);
-  background: color-mix(in srgb, var(--orange) 9%, transparent);
+  background: var(--primary-soft);
 }
 .navActive {
   font-weight: 700;
@@ -157,7 +164,7 @@
 }
 .sideLabel button {
   border: 0;
-  color: var(--orange);
+  color: var(--primary);
   background: transparent;
   font-size: 1rem;
   cursor: pointer;
@@ -195,17 +202,21 @@
   justify-content: space-between;
   gap: 25px;
   padding: 32px clamp(24px, 5vw, 70px) 28px;
-  border-bottom: 1px solid var(--line);
-  background: var(--panel);
+  border-bottom: 0;
+  color: #fff;
+  background: var(--primary);
 }
 .overline {
   margin-bottom: 8px;
-  color: var(--orange);
+  color: var(--primary);
   font-family: var(--font-mono);
   font-size: 0.64rem;
   font-weight: 700;
   letter-spacing: 0.14em;
   text-transform: uppercase;
+}
+.topbar .overline {
+  color: #b9d2e4;
 }
 .topbar h1,
 .authCard h1 {
@@ -214,6 +225,9 @@
   font-size: clamp(1.7rem, 3vw, 2.8rem);
   letter-spacing: -0.06em;
   line-height: 1;
+}
+.topbar h1 {
+  color: #fff;
 }
 .topActions {
   display: flex;
@@ -226,40 +240,43 @@
   gap: 8px;
   width: min(260px, 35vw);
   padding: 10px 0;
-  border-bottom: 1px solid var(--line);
-  color: var(--muted);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.35);
+  color: #c5d9e8;
 }
 .search input {
   width: 100%;
   border: 0;
   outline: 0;
-  color: var(--ink);
+  color: #fff;
   background: transparent;
   font: inherit;
   font-size: 0.8rem;
+}
+.search input::placeholder {
+  color: #c5d9e8;
 }
 .avatar {
   display: grid;
   width: 35px;
   height: 35px;
   place-items: center;
-  color: #fff;
-  background: var(--orange);
+  color: var(--primary);
+  background: #fff;
   font-size: 0.8rem;
   font-weight: 800;
 }
 .themeButton {
   width: 32px;
   height: 32px;
-  border: 1px solid var(--line);
-  color: var(--muted);
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  color: #fff;
   background: transparent;
   font-size: 1rem;
   cursor: pointer;
 }
 .themeButton:hover {
-  color: var(--ink);
-  border-color: var(--ink);
+  border-color: #fff;
+  color: #fff;
 }
 .sidebarCollapsed .sidebar {
   width: 72px;
@@ -395,13 +412,13 @@
   border: 0;
   padding: 9px 13px;
   color: #fff;
-  background: var(--ink);
+  background: var(--primary);
   font: inherit;
   font-size: 0.7rem;
   cursor: pointer;
 }
 .quickAdd button:hover {
-  background: var(--orange);
+  background: color-mix(in srgb, var(--primary) 82%, #000);
 }
 .boardPageHeader {
   display: flex;
@@ -462,6 +479,7 @@
 .boardColumn {
   min-height: 430px;
   padding: 10px;
+  border-radius: var(--radius-soft);
   background: color-mix(in srgb, var(--line) 42%, var(--panel));
 }
 .boardHeader {
@@ -511,6 +529,7 @@
   gap: 8px;
   padding: 12px;
   border: 1px solid var(--line);
+  border-radius: var(--radius-card);
   background: var(--panel);
   box-shadow: 0 1px 2px rgba(15, 15, 15, 0.04);
 }
@@ -666,6 +685,7 @@
   min-width: 0;
   flex: 1;
   border: 1px solid var(--line);
+  border-radius: var(--radius-soft);
   padding: 8px;
   outline: 0;
   color: var(--ink);
@@ -681,7 +701,7 @@
   flex: 0 0 30px;
   border: 0;
   color: #fff;
-  background: var(--ink);
+  background: var(--primary);
   cursor: pointer;
 }
 .panel h2,
@@ -1693,8 +1713,11 @@
 }
 
 .app .overline {
-  color: var(--orange);
+  color: var(--primary);
   font-size: 0.7rem;
+}
+.app .topbar .overline {
+  color: #b9d2e4;
 }
 .app .sideLabel,
 .app .filterBar,

@@ -29,7 +29,7 @@ export const defaultCategories = (userId: string): Category[] => [
 
 export const defaultSettings = (userId: string): Settings => ({
   userId,
-  theme: "system",
+  theme: "light",
   firstDay: "monday",
   timeFormat: "24",
   defaultView: "month",
@@ -61,7 +61,12 @@ export function loadData(): AppData {
             priority: todo.priority || "none",
           }))
         : [],
-      settings: Array.isArray(parsed.settings) ? parsed.settings : [],
+      settings: Array.isArray(parsed.settings)
+        ? parsed.settings.map((settings) => ({
+            ...settings,
+            theme: settings.theme === "dark" ? "dark" : "light",
+          }))
+        : [],
     };
   } catch {
     return emptyData;
