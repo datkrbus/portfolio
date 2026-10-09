@@ -1,18 +1,37 @@
 "use client";
-
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { useI18n } from "./I18nProvider";
+import LanguageSelect from "./LanguageSelect";
+import { useEffect, useMemo, useRef, useState } from "react";
+import dynamic from "next/dynamic";
+import {
+  applyTodoUpdate,
+  endTimeFor,
+  groupTodos,
+  matchesTodo,
+  today,
+  sortTodos,
+  type SortOrder,
+} from "./todo-utils";
+import { prepareImport } from "./todo-validation";
 import styles from "./todo.module.css";
-import AdvancedTodoModal from "./AdvancedTodoModal";
-import TimelineCalendar from "./TimelineCalendar";
-import CategoryManager from "./CategoryManager";
+const AdvancedTodoModal = dynamic(() => import("./AdvancedTodoModal"));
+const TimelineCalendar = dynamic(() => import("./TimelineCalendar"));
+const CategoryManager = dynamic(() => import("./CategoryManager"));
+import WorkspaceNav, { viewLabels } from "./WorkspaceNav";
+import Icon from "./Icon";
 import QuickAdd from "./QuickAdd";
 import BoardView from "./BoardView";
+import AuthScreen from "./AuthScreen";
+import ViewToolbar from "./ViewToolbar";
+import TaskList from "./TaskList";
+const Calendar = dynamic(() => import("./MonthCalendar"));
+const Statistics = dynamic(() => import("./Statistics"));
+const SettingsPanel = dynamic(() => import("./SettingsPanel"));
 import type {
   AppData,
   AuthMode,
   CalendarView,
   Category,
-  Priority,
   Todo,
   TodoStatus,
   View,
@@ -25,36 +44,8 @@ import {
   loadData,
   saveData,
   saveSession,
+  StorageConflictError,
 } from "./todo-storage";
-
-const today = () => new Date().toISOString().slice(0, 10);
-const dateFrom = (date: Date) => date.toISOString().slice(0, 10);
-const parseDate = (value: string) => new Date(`${value}T12:00:00`);
-const formatDate = (
-  value: string,
-  options: Intl.DateTimeFormatOptions = { month: "short", day: "numeric" },
-) => parseDate(value).toLocaleDateString("en-US", options);
-const weekStart = (value: string) => {
-  const date = parseDate(value);
-  const day = date.getDay();
-  date.setDate(date.getDate() - (day === 0 ? 6 : day - 1));
-  return dateFrom(date);
-};
-const addDays = (value: string, amount: number) => {
-  const date = parseDate(value);
-  date.setDate(date.getDate() + amount);
-  return dateFrom(date);
-};
-const sameMonth = (a: string, b: string) =>
-  parseDate(a).getMonth() === parseDate(b).getMonth() &&
-  parseDate(a).getFullYear() === parseDate(b).getFullYear();
-const priorityLabel: Record<Priority, string> = {
-  none: "None",
-  low: "Low",
-  medium: "Medium",
-  high: "High",
-};
-
 const blankTodo = (userId: string, date = today()): Todo => ({
   id: "",
   userId,
@@ -63,7 +54,7 @@ const blankTodo = (userId: string, date = today()): Todo => ({
   date,
   startTime: "09:00",
   endTime: "09:30",
-  allDay: false,
+  allDay: true,
   priority: "none",
   categoryId: "",
   completed: false,
@@ -74,8 +65,8 @@ const blankTodo = (userId: string, date = today()): Todo => ({
   createdAt: "",
   updatedAt: "",
 });
-
 export default function TodoApp() {
+  const { t, locale, formatDate } = useI18n();
   const [data, setData] = useState<AppData>({
     users: [],
     categories: [],
@@ -101,50 +92,97 @@ export default function TodoApp() {
     category: "all",
   });
   const [showFilters, setShowFilters] = useState(false);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [boardLayout, setBoardLayout] = useState<"board" | "list">("board");
+  const [sortOrder, setSortOrder] = useState<SortOrder>("scheduled");
+  const searchInput = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    const search = (event: KeyboardEvent) => {
+      if (
+        (event.ctrlKey || event.metaKey) &&
+        event.key.toLowerCase() === "k" &&
+        !document.querySelector("dialog[open]")
+      ) {
+        event.preventDefault();
+        searchInput.current?.focus();
+      }
+    };
+    document.addEventListener("keydown", search);
+    return () => document.removeEventListener("keydown", search);
+  }, []);
   const [selectedTodo, setSelectedTodo] = useState<Todo | null>(null);
   const [showTodoForm, setShowTodoForm] = useState(false);
   const [showCategoryForm, setShowCategoryForm] = useState(false);
-  const [categoryName, setCategoryName] = useState("");
+  const [storageError, setStorageError] = useState("");
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [currentDate, setCurrentDate] = useState(today);
+  const reminderKeys = useRef(new Set<string>());
+  const [systemDark, setSystemDark] = useState(false);
   const [toast, setToast] = useState("");
   const [deletedTodo, setDeletedTodo] = useState<Todo | null>(null);
-
   useEffect(() => {
-    const stored = loadData();
-    const existingAdmin = stored.users.find(
-      (item) => item.username === "admin",
-    );
-    let shouldSave = false;
-    if (!existingAdmin) {
-      const adminId = "local-admin";
-      stored.users.push({
-        id: adminId,
-        username: "admin",
-        password: "admin1",
-        createdAt: new Date().toISOString(),
-      });
-      stored.categories.push(...defaultCategories(adminId));
-      stored.settings.push(defaultSettings(adminId));
-      shouldSave = true;
-    } else if (
-      existingAdmin.id === "local-admin" &&
-      existingAdmin.password === "admin"
-    ) {
-      existingAdmin.password = "admin1";
-      shouldSave = true;
+    try {
+      const stored = loadData();
+      const existingAdmin = stored.users.find(
+        (item) => item.username === "admin",
+      );
+      if (!existingAdmin) {
+        const adminId = "local-admin";
+        stored.users.push({
+          id: adminId,
+          username: "admin",
+          password: "admin1",
+          createdAt: new Date().toISOString(),
+        });
+        stored.categories.push(...defaultCategories(adminId));
+        stored.settings.push(defaultSettings(adminId));
+      } else if (
+        existingAdmin.id === "local-admin" &&
+        existingAdmin.password === "admin"
+      ) {
+        existingAdmin.password = "admin1";
+      }
+      setData(stored);
+      const session = getSession();
+      setUserId(
+        stored.users.some((item) => item.id === session) ? session : null,
+      );
+    } catch {
+      setLoadFailed(true);
+      setStorageError(
+        "Không đọc được dữ liệu đã lưu. Dữ liệu gốc vẫn được giữ nguyên. Kiểm tra quyền lưu dữ liệu của trình duyệt rồi thử lại.",
+      );
     }
-    if (shouldSave) {
-      saveData(stored);
-    }
-    setData(stored);
-    setUserId(getSession());
     setReady(true);
   }, []);
   useEffect(() => {
-    if (ready) saveData(data);
-  }, [data, ready]);
+    if (!ready || loadFailed) return;
+    try {
+      saveData(data);
+      setStorageError("");
+    } catch (error) {
+      setStorageError(
+        error instanceof StorageConflictError
+          ? "Một tab khác đã thay đổi dữ liệu. Tải bản sao lưu hiện tại trước khi tải lại trang."
+          : "Chưa lưu được thay đổi. Hãy tải bản sao lưu trước khi đóng tab, rồi kiểm tra dung lượng và quyền lưu dữ liệu.",
+      );
+    }
+  }, [data, ready, loadFailed]);
   useEffect(() => {
-    if (!toast) return;
+    const refresh = () => setCurrentDate(today());
+    const timer = window.setInterval(refresh, 60000);
+    window.addEventListener("focus", refresh);
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+    const theme = () => setSystemDark(media.matches);
+    theme();
+    media.addEventListener("change", theme);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("focus", refresh);
+      media.removeEventListener("change", theme);
+    };
+  }, []);
+  useEffect(() => {
+    if (!toast || toast === "Đã xóa công việc") return;
     const timer = window.setTimeout(() => setToast(""), 3500);
     return () => window.clearTimeout(timer);
   }, [toast]);
@@ -158,7 +196,26 @@ export default function TodoApp() {
     [data.categories, userId],
   );
   const settings = data.settings.find((item) => item.userId === userId);
-
+  const categoryCounts = useMemo(
+    () =>
+      new Map(
+        Array.from(
+          groupTodos(todos, (todo) => todo.categoryId),
+          ([id, group]) => [id, group.length],
+        ),
+      ),
+    [todos],
+  );
+  const preferredView = settings?.defaultView;
+  useEffect(() => {
+    if (preferredView) setCalendarView(preferredView);
+  }, [userId, preferredView]);
+  const theme =
+    settings?.theme === "system"
+      ? systemDark
+        ? "dark"
+        : "light"
+      : settings?.theme || "light";
   useEffect(() => {
     if (!ready || !userId || typeof Notification === "undefined") return;
     const checkReminders = () => {
@@ -166,61 +223,98 @@ export default function TodoApp() {
       todos.forEach((todo) => {
         if (
           todo.completed ||
+          todo.allDay ||
           !todo.reminder ||
-          todo.date !== today() ||
-          !todo.startTime
+          !todo.startTime ||
+          Notification.permission !== "granted"
         )
           return;
-        const [hours, minutes] = todo.startTime.split(":").map(Number);
-        const taskTime = new Date();
-        taskTime.setHours(hours, minutes, 0, 0);
-        const minutesUntil = Math.round(
-          (taskTime.getTime() - now.getTime()) / 60000,
-        );
+        const taskTime = new Date(
+          `${todo.date}T${todo.startTime}:00`,
+        ).getTime();
+        const due = taskTime - todo.reminder.minutesBefore * 60000;
+        const key = `${userId}:${todo.id}:${due}`;
         if (
-          minutesUntil <= todo.reminder.minutesBefore &&
-          minutesUntil >= todo.reminder.minutesBefore - 1 &&
-          Notification.permission === "granted"
+          now.getTime() >= due &&
+          now.getTime() < due + 60000 &&
+          !reminderKeys.current.has(key)
         ) {
-          new Notification(todo.title, {
-            body: `Starts in ${todo.reminder.minutesBefore} minutes.`,
-          });
+          reminderKeys.current.add(key);
+          try {
+            new Notification(todo.title, {
+              body: t("Bắt đầu sau {0} phút.", {
+                "0": Math.max(0, Math.ceil((taskTime - now.getTime()) / 60000)),
+              }),
+              tag: key,
+            });
+          } catch {
+            /* Some browsers do not support desktop notifications. */
+          }
         }
       });
     };
     checkReminders();
     const timer = window.setInterval(checkReminders, 60000);
     return () => window.clearInterval(timer);
-  }, [ready, todos, userId]);
-
-  const visibleTodos = useMemo(
+  }, [ready, todos, userId, t]);
+  const visibleTodos = useMemo(() => {
+    const search = query.trim().toLocaleLowerCase();
+    return todos.filter((todo) =>
+      matchesTodo(todo, search, filter, currentDate),
+    );
+  }, [todos, query, filter, currentDate]);
+  const viewTodos = useMemo(
     () =>
-      todos.filter((todo) => {
-        const haystack =
-          `${todo.title} ${todo.description} ${todo.tags.join(" ")}`.toLowerCase();
-        return (
-          (!query || haystack.includes(query.toLowerCase())) &&
-          (filter.status === "all" ||
-            (filter.status === "completed"
-              ? todo.completed
-              : filter.status === "overdue"
-                ? !todo.completed && todo.deadline < today()
-                : !todo.completed)) &&
-          (filter.priority === "all" || todo.priority === filter.priority) &&
-          (filter.category === "all" || todo.categoryId === filter.category)
-        );
-      }),
-    [todos, query, filter],
+      sortTodos(
+        visibleTodos.filter((todo) =>
+          view === "today"
+            ? todo.date === currentDate
+            : view === "upcoming"
+              ? todo.date >= currentDate && !todo.completed
+              : view === "completed"
+                ? todo.completed
+                : true,
+        ),
+        sortOrder,
+      ),
+    [visibleTodos, view, currentDate, sortOrder],
   );
-
+  const summary = useMemo(
+    () => ({
+      active: todos.filter((todo) => !todo.completed).length,
+      today: todos.filter(
+        (todo) => todo.date === currentDate && !todo.completed,
+      ).length,
+      overdue: todos.filter(
+        (todo) =>
+          !todo.completed && todo.deadline && todo.deadline < currentDate,
+      ).length,
+      done: todos.filter((todo) => todo.completed).length,
+    }),
+    [todos, currentDate],
+  );
   if (!ready)
-    return <div className={styles.loading}>Loading your workspace...</div>;
+    return (
+      <div className={styles.loading}>{t("Đang mở không gian của bạn...")}</div>
+    );
+  if (loadFailed)
+    return (
+      <main className={styles.authPage}>
+        <section className={styles.authCard} role="alert">
+          <h1>{t("Chưa mở được không gian")}</h1>
+          <p>{t(storageError)}</p>
+          <button onClick={() => window.location.reload()}>
+            {t("Thử lại")}
+          </button>
+        </section>
+      </main>
+    );
   if (!userId || !user)
     return (
       <AuthScreen
         mode={authMode}
         form={authForm}
-        error={authError}
+        error={t(authError)}
         onModeChange={(mode) => {
           setAuthMode(mode);
           setAuthError("");
@@ -229,64 +323,72 @@ export default function TodoApp() {
         onSubmit={(event) => {
           event.preventDefault();
           const username = authForm.username.trim();
-          if (username.length < 3 || authForm.password.length < 6)
-            return setAuthError(
-              "Username must have 3 characters and password 6 characters.",
-            );
-          if (authMode === "register") {
-            if (authForm.password !== authForm.confirm)
-              return setAuthError("Passwords do not match.");
-            if (
-              data.users.some(
-                (item) =>
-                  item.username.toLowerCase() === username.toLowerCase(),
+          try {
+            if (username.length < 3 || authForm.password.length < 6)
+              return setAuthError(
+                "Tên cần ít nhất 3 ký tự; mật khẩu ít nhất 6 ký tự.",
+              );
+            if (authMode === "register") {
+              if (authForm.password !== authForm.confirm)
+                return setAuthError("Hai mật khẩu chưa trùng nhau.");
+              if (
+                data.users.some(
+                  (item) =>
+                    item.username.toLowerCase() === username.toLowerCase(),
+                )
               )
-            )
-              return setAuthError("Username is already in use.");
-            const id = crypto.randomUUID();
-            setData((current) => ({
-              ...current,
-              users: [
-                ...current.users,
-                {
-                  id,
-                  username,
-                  password: authForm.password,
-                  createdAt: new Date().toISOString(),
-                },
-              ],
-              categories: [...current.categories, ...defaultCategories(id)],
-              settings: [...current.settings, defaultSettings(id)],
-            }));
-            saveSession(id);
-            setUserId(id);
-          } else {
-            const found = data.users.find(
-              (item) =>
-                item.username.toLowerCase() === username.toLowerCase() &&
-                item.password === authForm.password,
+                return setAuthError("Tên này đã được dùng trên thiết bị này.");
+              const id = crypto.randomUUID();
+              setData((current) => ({
+                ...current,
+                users: [
+                  ...current.users,
+                  {
+                    id,
+                    username,
+                    password: authForm.password,
+                    createdAt: new Date().toISOString(),
+                  },
+                ],
+                categories: [
+                  ...current.categories,
+                  ...defaultCategories(id, locale),
+                ],
+                settings: [...current.settings, defaultSettings(id)],
+              }));
+              saveSession(id);
+              setUserId(id);
+            } else {
+              const found = data.users.find(
+                (item) =>
+                  item.username.toLowerCase() === username.toLowerCase() &&
+                  item.password === authForm.password,
+              );
+              if (!found) return setAuthError("Tên hoặc mật khẩu chưa đúng.");
+              saveSession(found.id);
+              setUserId(found.id);
+            }
+            setAuthForm({ username: "", password: "", confirm: "" });
+            setQuery("");
+            setFilter({ status: "all", priority: "all", category: "all" });
+            setView("dashboard");
+          } catch {
+            setAuthError(
+              "Trình duyệt chưa cho phép lưu dữ liệu. Hãy kiểm tra cài đặt rồi thử lại.",
             );
-            if (!found) return setAuthError("Invalid username or password.");
-            saveSession(found.id);
-            setUserId(found.id);
           }
         }}
       />
     );
-
   function updateTodo(nextTodo: Todo) {
-    const normalized = { ...nextTodo, updatedAt: new Date().toISOString() };
+    if (nextTodo.userId !== userId || !nextTodo.title.trim()) return;
     setData((current) => ({
       ...current,
-      todos: current.todos.some((item) => item.id === normalized.id)
-        ? current.todos.map((item) =>
-            item.id === normalized.id ? normalized : item,
-          )
-        : [normalized, ...current.todos],
+      todos: applyTodoUpdate(current.todos, nextTodo),
     }));
     setSelectedTodo(null);
     setShowTodoForm(false);
-    setToast("Todo saved");
+    setToast("Đã lưu công việc");
   }
   function toggleTodo(todo: Todo) {
     const completing = !todo.completed;
@@ -296,24 +398,6 @@ export default function TodoApp() {
       status: completing ? "done" : "todo",
       completedAt: completing ? new Date().toISOString() : undefined,
     });
-    if (completing && todo.recurrence) {
-      const nextDate =
-        todo.recurrence.frequency === "daily"
-          ? addDays(todo.date, todo.recurrence.interval)
-          : todo.recurrence.frequency === "monthly"
-            ? addDays(todo.date, todo.recurrence.interval * 30)
-            : addDays(todo.date, todo.recurrence.interval * 7);
-      if (!todo.recurrence.until || nextDate <= todo.recurrence.until)
-        updateTodo({
-          ...todo,
-          id: crypto.randomUUID(),
-          date: nextDate,
-          completed: false,
-          status: "todo",
-          completedAt: undefined,
-          createdAt: new Date().toISOString(),
-        });
-    }
   }
   function moveTodoStatus(todo: Todo, status: TodoStatus) {
     updateTodo({
@@ -331,6 +415,7 @@ export default function TodoApp() {
     if (!userId) return;
     updateTodo({
       ...blankTodo(userId),
+      endTime: endTimeFor("09:00", settings?.defaultDuration || 30),
       id: crypto.randomUUID(),
       title,
       status,
@@ -345,11 +430,31 @@ export default function TodoApp() {
     setDeletedTodo(removed || null);
     setData((current) => ({
       ...current,
-      todos: current.todos.filter((todo) => todo.id !== id),
+      todos: current.todos.filter(
+        (todo) => todo.id !== id || todo.userId !== userId,
+      ),
     }));
     setSelectedTodo(null);
     setShowTodoForm(false);
-    setToast("Todo deleted");
+    setToast("Đã xóa công việc");
+  }
+  function copyTodo(todo: Todo) {
+    const copiedTodo: Todo = {
+      ...todo,
+      recurrenceSourceId: undefined,
+      id: crypto.randomUUID(),
+      title: t("{0} (bản sao)", { "0": todo.title }),
+      completed: false,
+      status: "todo",
+      completedAt: undefined,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    setData((current) => ({
+      ...current,
+      todos: [copiedTodo, ...current.todos],
+    }));
+    setToast("Đã nhân bản công việc");
   }
   function undoDelete() {
     if (!deletedTodo) return;
@@ -358,7 +463,7 @@ export default function TodoApp() {
       todos: [deletedTodo, ...current.todos],
     }));
     setDeletedTodo(null);
-    setToast("Todo restored");
+    setToast("Đã khôi phục công việc");
   }
   function moveTodo(todo: Todo, date: string) {
     updateTodo({ ...todo, date });
@@ -369,44 +474,19 @@ export default function TodoApp() {
     startTime: string,
     endTime: string,
   ) {
-    updateTodo({ ...todo, date, startTime, endTime });
+    updateTodo({ ...todo, date, startTime, endTime, allDay: false });
   }
-  function quickAdd(value: string) {
-    if (!userId) return;
-    const time = value.match(/\b([01]?\d|2[0-3]):([0-5]\d)\b/);
-    const date = /\btomorrow\b/i.test(value) ? addDays(today(), 1) : today();
-    const title = value
-      .replace(/\btomorrow\b/gi, "")
-      .replace(/\s+at\s+([01]?\d|2[0-3]):([0-5]\d)/i, "")
-      .trim();
-    const startTime = time ? `${time[1].padStart(2, "0")}:${time[2]}` : "09:00";
-    const endTime = `${String(Math.min(23, Number(startTime.slice(0, 2)) + 1)).padStart(2, "0")}:${startTime.slice(3)}`;
+  function quickAdd(title: string, date: string) {
+    if (!userId || !title.trim()) return false;
     updateTodo({
       ...blankTodo(userId, date),
-      title,
-      startTime,
-      endTime,
+      title: title.trim(),
+      endTime: endTimeFor("09:00", settings?.defaultDuration || 30),
       categoryId: filter.category === "all" ? "" : filter.category,
       id: crypto.randomUUID(),
       createdAt: new Date().toISOString(),
     });
-  }
-  function addCategory(event: FormEvent) {
-    event.preventDefault();
-    if (!categoryName.trim() || !userId) return;
-    const category: Category = {
-      id: crypto.randomUUID(),
-      userId,
-      name: categoryName.trim(),
-      color: "#e76f8f",
-    };
-    setData((current) => ({
-      ...current,
-      categories: [...current.categories, category],
-    }));
-    setCategoryName("");
-    setShowCategoryForm(false);
-    setToast("Category created");
+    return true;
   }
   function saveCategory(category: Category) {
     if (!userId) return;
@@ -419,21 +499,27 @@ export default function TodoApp() {
           )
         : [...current.categories, normalized],
     }));
-    setToast("Category saved");
+    setToast("Đã lưu danh mục");
   }
   function deleteCategory(id: string) {
     setData((current) => ({
       ...current,
-      categories: current.categories.filter((category) => category.id !== id),
+      categories: current.categories.filter(
+        (category) => category.id !== id || category.userId !== userId,
+      ),
       todos: current.todos.map((todo) =>
-        todo.categoryId === id ? { ...todo, categoryId: "" } : todo,
+        todo.categoryId === id && todo.userId === userId
+          ? { ...todo, categoryId: "" }
+          : todo,
       ),
     }));
-    setToast("Category deleted");
+    if (filter.category === id)
+      setFilter((current) => ({ ...current, category: "all" }));
+    setToast("Đã xóa danh mục");
   }
   function exportData() {
     const payload = JSON.stringify(
-      { todos, categories, settings: settings ? [settings] : [] },
+      { version: 1, todos, categories, settings: settings ? [settings] : [] },
       null,
       2,
     );
@@ -456,276 +542,386 @@ export default function TodoApp() {
     }));
   }
   function toggleTheme() {
-    updateSettings("theme", settings?.theme === "dark" ? "light" : "dark");
+    updateSettings("theme", theme === "dark" ? "light" : "dark");
   }
-
+  function clearFilters() {
+    setQuery("");
+    setFilter({ status: "all", priority: "all", category: "all" });
+  }
+  function navigate(next: View) {
+    setView(next);
+    clearFilters();
+    setShowFilters(false);
+  }
+  function createTodo(
+    date = view === "calendar" ? cursor : today(),
+    startTime?: string,
+  ) {
+    if (!userId) return;
+    setSelectedTodo({
+      ...blankTodo(userId, date),
+      allDay: !startTime,
+      startTime: startTime || "09:00",
+      endTime: endTimeFor(
+        startTime || "09:00",
+        settings?.defaultDuration || 30,
+      ),
+      categoryId: filter.category === "all" ? "" : filter.category,
+    });
+    setShowTodoForm(true);
+  }
+  function openTodo(todo: Todo) {
+    setSelectedTodo(todo);
+    setShowTodoForm(true);
+  }
+  function logout() {
+    try {
+      clearSession();
+    } catch {
+      setToast(
+        "Chưa thể đăng xuất. Kiểm tra quyền lưu dữ liệu của trình duyệt.",
+      );
+      return;
+    }
+    setUserId(null);
+    setSelectedTodo(null);
+    setShowTodoForm(false);
+    setShowCategoryForm(false);
+    setDeletedTodo(null);
+    setToast("");
+    reminderKeys.current.clear();
+  }
+  const filtered =
+    Boolean(query.trim()) ||
+    Object.values(filter).some((value) => value !== "all");
+  const currentCategory = categories.find(
+    (item) => item.id === filter.category,
+  );
   const currentTitle =
-    view === "dashboard" ? "Dashboard" : view[0].toUpperCase() + view.slice(1);
-
+    view === "dashboard" && currentCategory
+      ? currentCategory.name
+      : t(viewLabels[view]);
+  const subtitles: Record<View, string> = {
+    dashboard: t("Mọi việc ở đúng chỗ. Tập trung vào bước tiếp theo."),
+    today: formatDate(currentDate, {
+      weekday: "long",
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+    }),
+    upcoming: t("Một góc nhìn rõ ràng cho những ngày sắp tới."),
+    calendar: t("Dành thời gian cho những việc quan trọng."),
+    completed: t("Những việc bạn đã làm được, từng bước một."),
+    statistics: t("Nhìn lại tiến độ theo nhịp của bạn."),
+    settings: t("Thiết lập cách làm việc phù hợp với bạn."),
+  };
+  const taskActions = {
+    categories,
+    onToggle: toggleTodo,
+    onOpen: openTodo,
+    onCopy: copyTodo,
+    onDelete: deleteTodo,
+    onCreate: () => createTodo(),
+    onReset: clearFilters,
+    filtered,
+  };
   return (
-    <main
-      className={`${styles.app} ${sidebarCollapsed ? styles.sidebarCollapsed : ""}`}
-      data-theme={settings?.theme}
-    >
-      <aside className={styles.sidebar}>
-        <button
-          className={styles.sidebarToggle}
-          onClick={() => setSidebarCollapsed((current) => !current)}
-          aria-label={
-            sidebarCollapsed ? "Expand navigation" : "Collapse navigation"
-          }
-        >
-          ☰
-        </button>
-        <div className={styles.brand}>
-          <span className={styles.brandMark}>✓</span>
-          <span>
-            quietly<span className={styles.brandAccent}>done</span>
-          </span>
-        </div>
-        <button
-          className={styles.newButton}
-          onClick={() => {
-            setSelectedTodo(blankTodo(userId));
-            setShowTodoForm(true);
-          }}
-        >
-          <span className={styles.newButtonLabel}>+ New Todo</span>
-          <span className={styles.newButtonIcon}>+</span>
-        </button>
-        <nav className={styles.nav} aria-label="Todo navigation">
-          <NavButton
-            label="Dashboard"
-            icon="⌂"
-            active={view === "dashboard"}
-            onClick={() => setView("dashboard")}
-          />
-          <NavButton
-            label="Calendar"
-            icon="▦"
-            active={view === "calendar"}
-            onClick={() => setView("calendar")}
-          />
-          <NavButton
-            label="Today"
-            icon="○"
-            active={view === "today"}
-            onClick={() => {
-              setCursor(today());
-              setView("today");
-            }}
-          />
-          <NavButton
-            label="Upcoming"
-            icon="→"
-            active={view === "upcoming"}
-            onClick={() => setView("upcoming")}
-          />
-          <NavButton
-            label="Completed"
-            icon="✓"
-            active={view === "completed"}
-            onClick={() => setView("completed")}
-          />
-          <NavButton
-            label="Statistics"
-            icon="▥"
-            active={view === "statistics"}
-            onClick={() => setView("statistics")}
-          />
-        </nav>
-        <div className={styles.sideSection}>
-          <div className={styles.sideLabel}>
-            Categories{" "}
-            <button onClick={() => setShowCategoryForm(true)}>+</button>
-          </div>
-          {categories.map((category) => (
-            <button
-              className={styles.categoryLink}
-              key={category.id}
-              onClick={() => {
-                setFilter({ ...filter, category: category.id });
-                setView("dashboard");
-              }}
-            >
-              <i style={{ background: category.color }} />
-              {category.name}
-              <span>
-                {todos.filter((todo) => todo.categoryId === category.id).length}
-              </span>
-            </button>
-          ))}
-        </div>
-        <div className={styles.sidebarBottom}>
-          <NavButton
-            label="Settings"
-            icon="⚙"
-            active={view === "settings"}
-            onClick={() => setView("settings")}
-          />
-          <button
-            className={styles.logout}
-            onClick={() => {
-              clearSession();
-              setUserId(null);
-            }}
-          >
-            Log out @{user.username}
-          </button>
-        </div>
-      </aside>
-
+    <main className={styles.app} data-theme={theme} lang={locale}>
+      <a className={styles.skipLink} href="#todo-content">
+        {t("Đến nội dung chính")}
+      </a>
+      <WorkspaceNav
+        view={view}
+        onView={navigate}
+        categories={categories}
+        categoryId={filter.category}
+        counts={categoryCounts}
+        todayCount={summary.today}
+        username={user.username}
+        onCategory={(category) => {
+          navigate("dashboard");
+          setFilter({ status: "all", priority: "all", category });
+        }}
+        onManage={() => setShowCategoryForm(true)}
+        onNew={() => createTodo()}
+      />
       <section className={styles.content}>
         <header className={styles.topbar}>
-          <div>
-            <p className={styles.overline}>Personal workspace</p>
-            <h1>{currentTitle}</h1>
+          <div className={styles.breadcrumb}>
+            <Icon name={view === "calendar" ? "calendar" : "board"} size={16} />
+            <span>{t("Không gian cá nhân")}</span>
+            <span>/</span>
+            <strong>{t(viewLabels[view])}</strong>
           </div>
           <div className={styles.topActions}>
-            <label className={styles.search}>
-              <span>⌕</span>
-              <input
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="Search tasks..."
-              />
-            </label>
-            <span className={styles.avatar}>
-              {user.username.slice(0, 1).toUpperCase()}
+            <LanguageSelect />
+            <span className={styles.savedStatus}>
+              <i data-error={Boolean(storageError)} />
+              {storageError ? t("Chưa lưu được") : t("Lưu trên máy này")}
             </span>
             <button
-              className={styles.themeButton}
+              className={styles.iconButton}
               onClick={toggleTheme}
-              aria-label="Toggle light and dark theme"
+              aria-label={
+                theme === "dark"
+                  ? t("Chuyển giao diện sáng")
+                  : t("Chuyển giao diện tối")
+              }
             >
-              {settings?.theme === "dark" ? "☼" : "☾"}
+              <Icon name={theme === "dark" ? "sun" : "moon"} />
             </button>
           </div>
         </header>
-        <div className={styles.contentBody}>
-          {view !== "settings" && view !== "dashboard" && (
-            <ViewToolbar
-              view={view}
-              showFilters={showFilters}
-              onToggle={() => setShowFilters((current) => !current)}
-              filter={filter}
-              categories={categories}
-              onChange={setFilter}
-            />
-          )}
-          {view === "dashboard" && (
-            <>
-              <QuickAdd onAdd={quickAdd} />
-              <div className={styles.boardPageHeader}>
-                <div>
-                  <p className={styles.overline}>Workspace</p>
-                  <h2>Todo board</h2>
-                </div>
-                <span className={styles.boardHint}>
-                  Drag tasks between columns
-                </span>
-              </div>
-              <BoardView
-                todos={todos}
-                categories={categories}
-                categoryFilter={filter.category}
-                onCategoryFilterChange={(category) =>
-                  setFilter({ ...filter, category })
-                }
-                onToggle={toggleTodo}
-                onOpen={(todo) => {
-                  setSelectedTodo(todo);
-                  setShowTodoForm(true);
+        <div className={styles.contentBody} id="todo-content" tabIndex={-1}>
+          <div className={styles.pageHeading}>
+            <div>
+              <p className={styles.overline}>
+                {view === "dashboard"
+                  ? t("CÙNG LÀM TỪNG VIỆC MỘT")
+                  : "QUIETLY DONE"}
+              </p>
+              <h1>{currentTitle}</h1>
+              <p className={styles.pageSubtitle}>{subtitles[view]}</p>
+            </div>
+            <button
+              className={styles.primaryButton}
+              aria-label={t("Thêm công việc")}
+              onClick={() => createTodo()}
+            >
+              <Icon name="plus" size={18} />
+              {t("Thêm công việc")}
+            </button>
+          </div>
+          {storageError && (
+            <div className={styles.errorBanner} role="alert">
+              <p>{t(storageError)}</p>
+              <button className={styles.outlineButton} onClick={exportData}>
+                {t("Tải bản sao lưu")}
+              </button>
+              <button
+                className={styles.textButton}
+                onClick={() => {
+                  if (
+                    window.confirm(
+                      t(
+                        "Tải lại dữ liệu đã lưu? Hãy tải bản sao lưu nếu bạn có thay đổi chưa lưu.",
+                      ),
+                    )
+                  )
+                    window.location.reload();
                 }}
-                onMove={moveTodoStatus}
-                onCreate={createBoardTodo}
+              >
+                {t("Tải lại")}
+              </button>
+            </div>
+          )}
+          {(view === "dashboard" || view === "today") && (
+            <div
+              className={styles.summaryStrip}
+              aria-label={t("Tổng quan công việc")}
+            >
+              <button
+                onClick={() => {
+                  navigate("dashboard");
+                  setFilter({
+                    status: "active",
+                    priority: "all",
+                    category: "all",
+                  });
+                }}
+              >
+                <span className={styles.summaryIcon}>
+                  <Icon name="list" />
+                </span>
+                <span>
+                  <strong>{summary.active}</strong>
+                  <small>{t("Chưa hoàn thành")}</small>
+                </span>
+              </button>
+              <button onClick={() => navigate("today")}>
+                <span className={styles.summaryIcon}>
+                  <Icon name="sun" />
+                </span>
+                <span>
+                  <strong>{summary.today}</strong>
+                  <small>{t("Cần làm hôm nay")}</small>
+                </span>
+              </button>
+              <button
+                onClick={() => {
+                  navigate("dashboard");
+                  setFilter({
+                    status: "overdue",
+                    priority: "all",
+                    category: "all",
+                  });
+                }}
+              >
+                <span
+                  className={`${styles.summaryIcon} ${summary.overdue ? styles.overdueText : ""}`}
+                >
+                  <Icon name="clock" />
+                </span>
+                <span>
+                  <strong>{summary.overdue}</strong>
+                  <small>{t("Đã quá hạn")}</small>
+                </span>
+              </button>
+              <button onClick={() => navigate("completed")}>
+                <span className={styles.summaryIcon}>
+                  <Icon name="check" />
+                </span>
+                <span>
+                  <strong>{summary.done}</strong>
+                  <small>{t("Đã hoàn thành")}</small>
+                </span>
+              </button>
+            </div>
+          )}
+          {view !== "settings" && view !== "statistics" && (
+            <>
+              {(view === "dashboard" || view === "today") && (
+                <QuickAdd onAdd={quickAdd} onDetails={() => createTodo()} />
+              )}
+              <div className={styles.workspaceTools}>
+                {view === "dashboard" && (
+                  <div
+                    className={styles.segmented}
+                    aria-label={t("Cách hiển thị")}
+                  >
+                    <button
+                      aria-pressed={boardLayout === "board"}
+                      onClick={() => setBoardLayout("board")}
+                    >
+                      <Icon name="board" size={16} />
+                      {t("Bảng")}
+                    </button>
+                    <button
+                      aria-pressed={boardLayout === "list"}
+                      onClick={() => setBoardLayout("list")}
+                    >
+                      <Icon name="list" size={16} />
+                      {t("Danh sách")}
+                    </button>
+                  </div>
+                )}
+                <label className={styles.search}>
+                  <Icon name="search" size={18} />
+                  <input
+                    ref={searchInput}
+                    type="search"
+                    aria-label={t("Tìm công việc trong màn hình hiện tại")}
+                    placeholder={t("Tìm công việc...")}
+                    value={query}
+                    onChange={(event) => setQuery(event.target.value)}
+                  />
+                  <kbd>Ctrl K</kbd>
+                </label>
+                {view !== "calendar" && (
+                  <label className={styles.sortControl}>
+                    <span>{t("Sắp xếp")}</span>
+                    <select
+                      aria-label={t("Sắp xếp công việc")}
+                      value={sortOrder}
+                      onChange={(event) =>
+                        setSortOrder(event.target.value as SortOrder)
+                      }
+                    >
+                      <option value="scheduled">{t("Theo lịch")}</option>
+                      <option value="priority">{t("Ưu tiên cao")}</option>
+                      <option value="newest">{t("Mới tạo")}</option>
+                    </select>
+                  </label>
+                )}
+              </div>
+              <ViewToolbar
+                showFilters={showFilters}
+                onToggle={() => setShowFilters(!showFilters)}
+                filter={filter}
+                categories={categories}
+                onChange={setFilter}
+                count={viewTodos.length}
+                query={query}
+                onClear={clearFilters}
+                hideStatus={view === "completed" || view === "upcoming"}
               />
             </>
           )}
-          {view === "calendar" &&
-            (calendarView === "week" || calendarView === "day" ? (
-              <TimelineCalendar
-                todos={visibleTodos}
-                cursor={cursor}
-                calendarView={calendarView}
-                onCursor={setCursor}
-                onOpen={(todo) => {
-                  setSelectedTodo(todo);
-                  setShowTodoForm(true);
-                }}
-                onMove={moveTimedTodo}
-                onCreate={(date, startTime) => {
-                  setSelectedTodo({
-                    ...blankTodo(userId, date),
-                    startTime,
-                    endTime: `${String(Number(startTime.slice(0, 2)) + 1).padStart(2, "0")}:00`,
-                  });
-                  setShowTodoForm(true);
-                }}
+          {view === "dashboard" &&
+            (boardLayout === "board" && (!filtered || viewTodos.length > 0) ? (
+              <BoardView
+                todos={viewTodos}
+                categories={categories}
+                categoryFilter={filter.category}
+                onOpen={openTodo}
+                onToggle={toggleTodo}
+                onCopy={copyTodo}
+                onDelete={deleteTodo}
+                onMove={moveTodoStatus}
+                onCreate={createBoardTodo}
               />
             ) : (
-              <Calendar
-                todos={visibleTodos}
-                cursor={cursor}
-                calendarView={calendarView}
-                onCursor={setCursor}
-                onCalendarView={setCalendarView}
-                onOpen={(todo) => {
-                  setSelectedTodo(todo);
-                  setShowTodoForm(true);
-                }}
-                onDrop={moveTodo}
-                onCreate={(date) => {
-                  setSelectedTodo(blankTodo(userId, date));
-                  setShowTodoForm(true);
-                }}
+              <TaskList
+                title={t("Tất cả công việc")}
+                todos={viewTodos}
+                empty={t("Bắt đầu từ một việc nhỏ")}
+                {...taskActions}
               />
             ))}
           {view === "today" && (
             <TaskList
-              title={`Today · ${formatDate(today(), { weekday: "long", month: "long", day: "numeric" })}`}
-              todos={visibleTodos.filter((todo) => todo.date === today())}
-              categories={categories}
-              onToggle={toggleTodo}
-              onOpen={(todo) => {
-                setSelectedTodo(todo);
-                setShowTodoForm(true);
-              }}
-              onDelete={deleteTodo}
-              empty="Nothing scheduled today."
+              title={t("Kế hoạch hôm nay")}
+              todos={viewTodos}
+              empty={t("Hôm nay chưa có công việc")}
+              {...taskActions}
             />
           )}
           {view === "upcoming" && (
             <TaskList
-              title="Upcoming"
-              todos={visibleTodos
-                .filter((todo) => todo.date >= today() && !todo.completed)
-                .sort((a, b) => a.date.localeCompare(b.date))}
-              categories={categories}
-              onToggle={toggleTodo}
-              onOpen={(todo) => {
-                setSelectedTodo(todo);
-                setShowTodoForm(true);
-              }}
-              onDelete={deleteTodo}
-              empty="Your upcoming list is clear."
+              title={t("Kế hoạch sắp tới")}
+              todos={viewTodos}
+              empty={t("Lịch sắp tới đang trống")}
               grouped
+              {...taskActions}
             />
           )}
           {view === "completed" && (
             <TaskList
-              title="Completed"
-              todos={visibleTodos.filter((todo) => todo.completed)}
-              categories={categories}
-              onToggle={toggleTodo}
-              onOpen={(todo) => {
-                setSelectedTodo(todo);
-                setShowTodoForm(true);
-              }}
-              onDelete={deleteTodo}
-              empty="No completed tasks yet."
+              title={t("Những việc đã hoàn thành")}
+              todos={viewTodos}
+              empty={t("Thành quả sẽ xuất hiện ở đây")}
+              {...taskActions}
             />
           )}
+          {view === "calendar" &&
+            (calendarView === "week" || calendarView === "day" ? (
+              <TimelineCalendar
+                todos={viewTodos}
+                cursor={cursor}
+                calendarView={calendarView}
+                firstDay={settings?.firstDay || "monday"}
+                onCursor={setCursor}
+                onCalendarView={setCalendarView}
+                onOpen={openTodo}
+                onMove={moveTimedTodo}
+                onCreate={createTodo}
+              />
+            ) : (
+              <Calendar
+                todos={viewTodos}
+                categories={categories}
+                cursor={cursor}
+                calendarView={calendarView}
+                firstDay={settings?.firstDay || "monday"}
+                onCursor={setCursor}
+                onCalendarView={setCalendarView}
+                onOpen={openTodo}
+                onCopy={copyTodo}
+                onToggle={toggleTodo}
+                onDrop={moveTodo}
+                onCreate={createTodo}
+              />
+            ))}
           {view === "statistics" && (
             <Statistics todos={todos} categories={categories} />
           )}
@@ -734,39 +930,46 @@ export default function TodoApp() {
               settings={settings}
               onChange={updateSettings}
               onExport={exportData}
-              onImport={(imported) => {
+              onCategories={() => setShowCategoryForm(true)}
+              onLogout={logout}
+              onImport={(backup) => {
+                const imported = prepareImport(backup, userId);
                 setData((current) => ({
                   ...current,
                   todos: [
                     ...current.todos.filter((todo) => todo.userId !== userId),
-                    ...imported.todos.map((todo) => ({
-                      ...todo,
-                      userId: userId!,
-                    })),
+                    ...imported.todos,
                   ],
                   categories: [
                     ...current.categories.filter(
                       (category) => category.userId !== userId,
                     ),
-                    ...imported.categories.map((category) => ({
-                      ...category,
-                      userId: userId!,
-                    })),
+                    ...imported.categories,
                   ],
+                  settings: imported.settings.length
+                    ? [
+                        ...current.settings.filter(
+                          (item) => item.userId !== userId,
+                        ),
+                        ...imported.settings,
+                      ]
+                    : current.settings,
                 }));
-                setToast("Backup imported");
+                clearFilters();
+                setDeletedTodo(null);
+                setToast("Đã khôi phục bản sao lưu");
               }}
               onClear={() => {
-                if (window.confirm("Delete all your Todo data?"))
-                  setData((current) => ({
-                    ...current,
-                    todos: current.todos.filter(
-                      (todo) => todo.userId !== userId,
-                    ),
-                    categories: current.categories.filter(
-                      (category) => category.userId !== userId,
-                    ),
-                  }));
+                setData((current) => ({
+                  ...current,
+                  todos: current.todos.filter((todo) => todo.userId !== userId),
+                  categories: current.categories.filter(
+                    (category) => category.userId !== userId,
+                  ),
+                }));
+                clearFilters();
+                setDeletedTodo(null);
+                setToast("Đã xóa dữ liệu công việc");
               }}
             />
           )}
@@ -794,908 +997,23 @@ export default function TodoApp() {
           onClose={() => setShowCategoryForm(false)}
         />
       )}
-      {toast && (
-        <div className={styles.toast}>
-          {toast}
-          {deletedTodo && toast === "Todo deleted" && (
-            <button onClick={undoDelete}>Undo</button>
-          )}
+      {(toast || deletedTodo) && (
+        <div className={styles.toast} role="status" aria-live="polite">
+          <Icon name="check" size={18} />
+          <span>{t(toast || "Đã xóa công việc")}</span>
+          {deletedTodo && <button onClick={undoDelete}>{t("Hoàn tác")}</button>}
+          <button
+            className={styles.iconButton}
+            aria-label={t("Đóng thông báo")}
+            onClick={() => {
+              setToast("");
+              setDeletedTodo(null);
+            }}
+          >
+            <Icon name="close" size={16} />
+          </button>
         </div>
       )}
     </main>
-  );
-}
-
-function AuthScreen({
-  mode,
-  form,
-  error,
-  onModeChange,
-  onChange,
-  onSubmit,
-}: {
-  mode: AuthMode;
-  form: { username: string; password: string; confirm: string };
-  error: string;
-  onModeChange: (mode: AuthMode) => void;
-  onChange: (form: {
-    username: string;
-    password: string;
-    confirm: string;
-  }) => void;
-  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
-}) {
-  return (
-    <main className={styles.authPage}>
-      <div className={styles.authCard}>
-        <div className={styles.brand}>
-          <span className={styles.brandMark}>✓</span>
-          <span>
-            quietly<span className={styles.brandAccent}>done</span>
-          </span>
-        </div>
-        <p className={styles.overline}>Local workspace</p>
-        <h1>
-          {mode === "login" ? "Welcome back." : "Make space for progress."}
-        </h1>
-        <p className={styles.authIntro}>
-          Your tasks stay in this browser. No backend, no account server.
-        </p>
-        <form className={styles.authForm} onSubmit={onSubmit}>
-          <input
-            required
-            minLength={3}
-            placeholder="Username"
-            value={form.username}
-            onChange={(event) =>
-              onChange({ ...form, username: event.target.value })
-            }
-          />
-          <input
-            required
-            minLength={6}
-            type="password"
-            placeholder="Password"
-            value={form.password}
-            onChange={(event) =>
-              onChange({ ...form, password: event.target.value })
-            }
-          />
-          {mode === "register" && (
-            <input
-              required
-              minLength={6}
-              type="password"
-              placeholder="Confirm password"
-              value={form.confirm}
-              onChange={(event) =>
-                onChange({ ...form, confirm: event.target.value })
-              }
-            />
-          )}
-          {error && <p className={styles.formError}>{error}</p>}
-          <button className={styles.primaryButton}>
-            {mode === "login" ? "Log in" : "Create account"}
-          </button>
-        </form>
-        <button
-          className={styles.textButton}
-          onClick={() => onModeChange(mode === "login" ? "register" : "login")}
-        >
-          {mode === "login"
-            ? "Don't have an account? Register"
-            : "Already have an account? Log in"}
-        </button>
-        <small className={styles.localNotice}>
-          Demo authentication only. Passwords are stored locally.
-        </small>
-      </div>
-    </main>
-  );
-}
-
-function NavButton({
-  label,
-  icon,
-  active,
-  onClick,
-}: {
-  label: string;
-  icon: string;
-  active: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      className={`${styles.navButton} ${active ? styles.navActive : ""}`}
-      onClick={onClick}
-    >
-      <span>{icon}</span>
-      <span className={styles.navLabel}>{label}</span>
-    </button>
-  );
-}
-
-function Dashboard({
-  todos,
-  onToggle,
-  onOpen,
-  onView,
-}: {
-  todos: Todo[];
-  onToggle: (todo: Todo) => void;
-  onOpen: (todo: Todo) => void;
-  onView: (view: View) => void;
-}) {
-  const upcoming = todos
-    .filter((todo) => !todo.completed && todo.date >= today())
-    .sort((a, b) =>
-      `${a.date}${a.startTime}`.localeCompare(`${b.date}${b.startTime}`),
-    )
-    .slice(0, 5);
-  return (
-    <div className={styles.dashboard}>
-      <div className={styles.pageIntro}>
-        <div>
-          <p className={styles.overline}>Personal workspace</p>
-          <h2>My tasks</h2>
-        </div>
-      </div>
-      <section className={styles.panel}>
-        <div className={styles.panelHeader}>
-          <div>
-            <h2>Upcoming</h2>
-          </div>
-          <button
-            className={styles.textButton}
-            onClick={() => onView("upcoming")}
-          >
-            View on calendar →
-          </button>
-        </div>
-        {upcoming.length ? (
-          upcoming.map((todo) => (
-            <TaskRow
-              key={todo.id}
-              todo={todo}
-              onToggle={onToggle}
-              onOpen={onOpen}
-            />
-          ))
-        ) : (
-          <Empty text="Nothing waiting on you." />
-        )}
-      </section>
-    </div>
-  );
-}
-function Metric({
-  label,
-  value,
-  accent,
-}: {
-  label: string;
-  value: string | number;
-  accent: string;
-}) {
-  return (
-    <div className={`${styles.metric} ${styles[`metric${accent}`]}`}>
-      <span>{label}</span>
-      <strong>{value}</strong>
-      <i />
-    </div>
-  );
-}
-function ViewToolbar({
-  view,
-  showFilters,
-  onToggle,
-  filter,
-  categories,
-  onChange,
-}: {
-  view: View;
-  showFilters: boolean;
-  onToggle: () => void;
-  filter: { status: string; priority: string; category: string };
-  categories: Category[];
-  onChange: (filter: {
-    status: string;
-    priority: string;
-    category: string;
-  }) => void;
-}) {
-  const activeFilters = [
-    filter.status !== "all",
-    filter.priority !== "all",
-    filter.category !== "all",
-  ].filter(Boolean).length;
-  return (
-    <div className={styles.viewToolbar}>
-      <span className={styles.viewContext}>{view} view</span>
-      <button className={styles.toolbarButton} onClick={onToggle}>
-        ☷ Filter{activeFilters ? ` · ${activeFilters}` : ""}
-      </button>
-      {showFilters && (
-        <FilterBar
-          filter={filter}
-          categories={categories}
-          onChange={onChange}
-        />
-      )}
-    </div>
-  );
-}
-function FilterBar({
-  filter,
-  categories,
-  onChange,
-}: {
-  filter: { status: string; priority: string; category: string };
-  categories: Category[];
-  onChange: (filter: {
-    status: string;
-    priority: string;
-    category: string;
-  }) => void;
-}) {
-  return (
-    <div className={styles.filterBar}>
-      <span>Filter</span>
-      <select
-        value={filter.status}
-        onChange={(event) =>
-          onChange({ ...filter, status: event.target.value })
-        }
-      >
-        <option value="all">All status</option>
-        <option value="active">Incomplete</option>
-        <option value="completed">Completed</option>
-        <option value="overdue">Overdue</option>
-      </select>
-      <select
-        value={filter.priority}
-        onChange={(event) =>
-          onChange({ ...filter, priority: event.target.value })
-        }
-      >
-        <option value="all">All priority</option>
-        {Object.entries(priorityLabel).map(([value, label]) => (
-          <option value={value} key={value}>
-            {label}
-          </option>
-        ))}
-      </select>
-      <select
-        value={filter.category}
-        onChange={(event) =>
-          onChange({ ...filter, category: event.target.value })
-        }
-      >
-        <option value="all">All categories</option>
-        {categories.map((category) => (
-          <option value={category.id} key={category.id}>
-            {category.name}
-          </option>
-        ))}
-      </select>
-    </div>
-  );
-}
-function TaskList({
-  title,
-  todos,
-  categories,
-  onToggle,
-  onOpen,
-  onDelete,
-  empty,
-  grouped,
-}: {
-  title: string;
-  todos: Todo[];
-  categories: Category[];
-  onToggle: (todo: Todo) => void;
-  onOpen: (todo: Todo) => void;
-  onDelete?: (id: string) => void;
-  empty: string;
-  grouped?: boolean;
-}) {
-  const groups: Record<string, Todo[]> = grouped
-    ? todos.reduce<Record<string, Todo[]>>(
-        (result, todo) => ({
-          ...result,
-          [todo.date]: [...(result[todo.date] || []), todo],
-        }),
-        {},
-      )
-    : { all: todos };
-  return (
-    <section className={styles.taskList}>
-      <div className={styles.listHeading}>
-        <div>
-          <p className={styles.overline}>Task view</p>
-          <h2>{title}</h2>
-        </div>
-        <span>{todos.length} tasks</span>
-      </div>
-      {Object.entries(groups).map(([date, group]) => (
-        <div className={styles.taskGroup} key={date}>
-          {grouped && (
-            <h3>
-              {formatDate(date, {
-                weekday: "long",
-                month: "long",
-                day: "numeric",
-              })}
-            </h3>
-          )}
-          {group.map((todo) => (
-            <TaskRow
-              key={todo.id}
-              todo={todo}
-              categories={categories}
-              onToggle={onToggle}
-              onOpen={onOpen}
-              onDelete={onDelete}
-            />
-          ))}
-        </div>
-      ))}
-      {!todos.length && <Empty text={empty} />}
-    </section>
-  );
-}
-function TaskRow({
-  todo,
-  categories = [],
-  onToggle,
-  onOpen,
-  onDelete,
-}: {
-  todo: Todo;
-  categories?: Category[];
-  onToggle?: (todo: Todo) => void;
-  onOpen: (todo: Todo) => void;
-  onDelete?: (id: string) => void;
-}) {
-  const category = categories.find((item) => item.id === todo.categoryId);
-  return (
-    <article
-      className={`${styles.taskRow} ${todo.completed ? styles.taskDone : ""}`}
-    >
-      <button
-        className={styles.checkbox}
-        onClick={() => onToggle?.(todo)}
-        aria-label="Toggle task"
-      >
-        {todo.completed ? "✓" : ""}
-      </button>
-      <button className={styles.taskMain} onClick={() => onOpen(todo)}>
-        <strong>{todo.title}</strong>
-        <span>
-          {todo.allDay
-            ? "All day"
-            : `${todo.date} · ${todo.startTime}–${todo.endTime}`}
-          {category && (
-            <>
-              <b style={{ color: category.color }}> · {category.name}</b>
-            </>
-          )}
-        </span>
-      </button>
-      <span
-        className={`${styles.priority} ${styles[`priority${todo.priority}`]}`}
-      >
-        {priorityLabel[todo.priority]}
-      </span>
-      {onDelete && (
-        <button
-          className={styles.deleteIcon}
-          onClick={() => onDelete(todo.id)}
-          aria-label="Delete"
-        >
-          ×
-        </button>
-      )}
-    </article>
-  );
-}
-function Empty({ text }: { text: string }) {
-  return (
-    <div className={styles.empty}>
-      <span>—</span>
-      <p>{text}</p>
-      <small>Use “New Todo” to make a start.</small>
-    </div>
-  );
-}
-
-function Calendar({
-  todos,
-  cursor,
-  calendarView,
-  onCursor,
-  onCalendarView,
-  onOpen,
-  onDrop,
-  onCreate,
-}: {
-  todos: Todo[];
-  cursor: string;
-  calendarView: CalendarView;
-  onCursor: (value: string) => void;
-  onCalendarView: (value: CalendarView) => void;
-  onOpen: (todo: Todo) => void;
-  onDrop: (todo: Todo, date: string) => void;
-  onCreate: (date: string) => void;
-}) {
-  const shift = (amount: number) =>
-    onCursor(
-      calendarView === "month"
-        ? addDays(cursor, amount * 30)
-        : addDays(cursor, amount * (calendarView === "week" ? 7 : 1)),
-    );
-  const days =
-    calendarView === "month"
-      ? Array.from({ length: 35 }, (_, index) => {
-          const first = new Date(
-            parseDate(cursor).getFullYear(),
-            parseDate(cursor).getMonth(),
-            1,
-          );
-          first.setDate(first.getDate() - ((first.getDay() + 6) % 7) + index);
-          return dateFrom(first);
-        })
-      : Array.from({ length: calendarView === "week" ? 7 : 1 }, (_, index) =>
-          addDays(weekStart(cursor), index),
-        );
-  const title =
-    calendarView === "month"
-      ? parseDate(cursor).toLocaleDateString("en-US", {
-          month: "long",
-          year: "numeric",
-        })
-      : calendarView === "week"
-        ? `${formatDate(days[0], { month: "short", day: "numeric" })} – ${formatDate(days[6], { month: "short", day: "numeric", year: "numeric" })}`
-        : formatDate(cursor, {
-            weekday: "long",
-            month: "long",
-            day: "numeric",
-          });
-  return (
-    <section className={styles.calendar}>
-      <div className={styles.calendarToolbar}>
-        <div className={styles.calendarNav}>
-          <button onClick={() => shift(-1)}>←</button>
-          <button onClick={() => onCursor(today())}>Today</button>
-          <button onClick={() => shift(1)}>→</button>
-          <h2>{title}</h2>
-        </div>
-        <div className={styles.viewTabs}>
-          {(["month", "week", "day", "agenda"] as CalendarView[]).map(
-            (item) => (
-              <button
-                className={item === calendarView ? styles.tabActive : ""}
-                key={item}
-                onClick={() => onCalendarView(item)}
-              >
-                {item}
-              </button>
-            ),
-          )}
-        </div>
-      </div>
-      {calendarView === "agenda" ? (
-        <TaskList
-          title="Agenda"
-          todos={todos.sort((a, b) => a.date.localeCompare(b.date))}
-          categories={[]}
-          onToggle={() => undefined}
-          onOpen={onOpen}
-          empty="No tasks in this range."
-        />
-      ) : (
-        <div
-          className={`${styles.calendarGrid} ${calendarView !== "month" ? styles.timelineGrid : ""}`}
-        >
-          {calendarView === "month" &&
-            ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((day) => (
-              <div className={styles.dayName} key={day}>
-                {day}
-              </div>
-            ))}
-          {days.map((day) => (
-            <div
-              className={`${styles.dayCell} ${day === today() ? styles.dayToday : ""} ${!sameMonth(day, cursor) && calendarView === "month" ? styles.dayOutside : ""}`}
-              key={day}
-              onDoubleClick={() => onCreate(day)}
-              onDragOver={(event) => event.preventDefault()}
-              onDrop={(event) => {
-                const id = event.dataTransfer.getData("todo");
-                const todo = todos.find((item) => item.id === id);
-                if (todo) onDrop(todo, day);
-              }}
-            >
-              <button
-                className={styles.dayNumber}
-                onClick={() => onCreate(day)}
-              >
-                {formatDate(day, { day: "numeric" })}
-              </button>
-              {todos
-                .filter((todo) => todo.date === day)
-                .map((todo) => (
-                  <button
-                    className={`${styles.calendarTask} ${styles[`priority${todo.priority}`]}`}
-                    draggable
-                    key={todo.id}
-                    onDragStart={(event) =>
-                      event.dataTransfer.setData("todo", todo.id)
-                    }
-                    onClick={() => onOpen(todo)}
-                  >
-                    {todo.title}
-                  </button>
-                ))}
-            </div>
-          ))}
-        </div>
-      )}
-    </section>
-  );
-}
-
-function TodoModal({
-  todo,
-  categories,
-  onSave,
-  onDelete,
-  onClose,
-}: {
-  todo: Todo;
-  categories: Category[];
-  onSave: (todo: Todo) => void;
-  onDelete?: () => void;
-  onClose: () => void;
-}) {
-  const [draft, setDraft] = useState(todo);
-  const submit = (event: FormEvent) => {
-    event.preventDefault();
-    if (!draft.title.trim()) return;
-    onSave({
-      ...draft,
-      title: draft.title.trim(),
-      id: draft.id || crypto.randomUUID(),
-      createdAt: draft.createdAt || new Date().toISOString(),
-    });
-  };
-  return (
-    <div className={styles.modalBackdrop}>
-      <form className={styles.modal} onSubmit={submit}>
-        <div className={styles.modalHeader}>
-          <div>
-            <p className={styles.overline}>Todo details</p>
-            <h2>{todo.id ? "Edit task" : "New task"}</h2>
-          </div>
-          <button
-            type="button"
-            className={styles.closeButton}
-            onClick={onClose}
-          >
-            ×
-          </button>
-        </div>
-        <input
-          className={styles.titleInput}
-          autoFocus
-          required
-          placeholder="Task title"
-          value={draft.title}
-          onChange={(event) =>
-            setDraft({ ...draft, title: event.target.value })
-          }
-        />
-        <textarea
-          placeholder="Description (optional)"
-          value={draft.description}
-          onChange={(event) =>
-            setDraft({ ...draft, description: event.target.value })
-          }
-        />
-        <div className={styles.formGrid}>
-          <label>
-            Date
-            <input
-              type="date"
-              value={draft.date}
-              onChange={(event) =>
-                setDraft({ ...draft, date: event.target.value })
-              }
-            />
-          </label>
-          <label>
-            Priority
-            <select
-              value={draft.priority}
-              onChange={(event) =>
-                setDraft({ ...draft, priority: event.target.value as Priority })
-              }
-            >
-              {Object.entries(priorityLabel).map(([value, label]) => (
-                <option value={value} key={value}>
-                  {label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Start
-            <input
-              type="time"
-              value={draft.startTime}
-              disabled={draft.allDay}
-              onChange={(event) =>
-                setDraft({ ...draft, startTime: event.target.value })
-              }
-            />
-          </label>
-          <label>
-            End
-            <input
-              type="time"
-              value={draft.endTime}
-              disabled={draft.allDay}
-              onChange={(event) =>
-                setDraft({ ...draft, endTime: event.target.value })
-              }
-            />
-          </label>
-          <label>
-            Category
-            <select
-              value={draft.categoryId}
-              onChange={(event) =>
-                setDraft({ ...draft, categoryId: event.target.value })
-              }
-            >
-              <option value="">No category</option>
-              {categories.map((category) => (
-                <option value={category.id} key={category.id}>
-                  {category.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Deadline
-            <input
-              type="date"
-              value={draft.deadline}
-              onChange={(event) =>
-                setDraft({ ...draft, deadline: event.target.value })
-              }
-            />
-          </label>
-        </div>
-        <label className={styles.checkLabel}>
-          <input
-            type="checkbox"
-            checked={draft.allDay}
-            onChange={(event) =>
-              setDraft({ ...draft, allDay: event.target.checked })
-            }
-          />{" "}
-          All day
-        </label>
-        <label className={styles.checkLabel}>
-          <input
-            type="checkbox"
-            checked={Boolean(draft.recurrence)}
-            onChange={(event) =>
-              setDraft({
-                ...draft,
-                recurrence: event.target.checked
-                  ? { frequency: "weekly", interval: 1 }
-                  : undefined,
-              })
-            }
-          />{" "}
-          Repeat weekly
-        </label>
-        <div className={styles.modalActions}>
-          {onDelete && (
-            <button
-              type="button"
-              className={styles.dangerButton}
-              onClick={onDelete}
-            >
-              Delete
-            </button>
-          )}
-          <span />
-          <button type="button" onClick={onClose}>
-            Cancel
-          </button>
-          <button className={styles.primaryButton}>Save task</button>
-        </div>
-      </form>
-    </div>
-  );
-}
-
-function Statistics({
-  todos,
-  categories,
-}: {
-  todos: Todo[];
-  categories: Category[];
-}) {
-  const completed = todos.filter((todo) => todo.completed).length;
-  return (
-    <section className={styles.statistics}>
-      <div className={styles.listHeading}>
-        <div>
-          <p className={styles.overline}>Patterns, not pressure</p>
-          <h2>Your statistics</h2>
-        </div>
-      </div>
-      <div className={styles.statsGrid}>
-        <Metric label="Created" value={todos.length} accent="orange" />
-        <Metric label="Completed" value={completed} accent="green" />
-        <Metric
-          label="Overdue"
-          value={
-            todos.filter(
-              (todo) =>
-                !todo.completed && todo.deadline && todo.deadline < today(),
-            ).length
-          }
-          accent="purple"
-        />
-        <Metric
-          label="Completion rate"
-          value={`${todos.length ? Math.round((completed / todos.length) * 100) : 0}%`}
-          accent="blue"
-        />
-      </div>
-      <div className={styles.panel}>
-        <div className={styles.panelHeader}>
-          <h2>By category</h2>
-        </div>
-        {categories.map((category) => {
-          const count = todos.filter(
-            (todo) => todo.categoryId === category.id,
-          ).length;
-          return (
-            <div className={styles.statBar} key={category.id}>
-              <span>{category.name}</span>
-              <div>
-                <i
-                  style={{
-                    width: `${todos.length ? (count / todos.length) * 100 : 0}%`,
-                    background: category.color,
-                  }}
-                />
-              </div>
-              <b>{count}</b>
-            </div>
-          );
-        })}
-      </div>
-    </section>
-  );
-}
-function SettingsPanel({
-  settings,
-  onChange,
-  onExport,
-  onImport,
-  onClear,
-}: {
-  settings?: AppData["settings"][number];
-  onChange: (key: string, value: string | number) => void;
-  onExport: () => void;
-  onImport: (data: { todos: Todo[]; categories: Category[] }) => void;
-  onClear: () => void;
-}) {
-  if (!settings) return null;
-  return (
-    <section className={styles.settings}>
-      <div className={styles.listHeading}>
-        <div>
-          <p className={styles.overline}>Preferences</p>
-          <h2>Settings</h2>
-        </div>
-      </div>
-      <div className={styles.settingsGrid}>
-        <label>
-          Theme
-          <select
-            value={settings.theme}
-            onChange={(event) => onChange("theme", event.target.value)}
-          >
-            <option value="light">Light</option>
-            <option value="dark">Dark</option>
-          </select>
-        </label>
-        <label>
-          Default calendar view
-          <select
-            value={settings.defaultView}
-            onChange={(event) => onChange("defaultView", event.target.value)}
-          >
-            <option value="month">Month</option>
-            <option value="week">Week</option>
-            <option value="day">Day</option>
-          </select>
-        </label>
-        <label>
-          First day of week
-          <select
-            value={settings.firstDay}
-            onChange={(event) => onChange("firstDay", event.target.value)}
-          >
-            <option value="monday">Monday</option>
-            <option value="sunday">Sunday</option>
-          </select>
-        </label>
-        <label>
-          Default duration
-          <select
-            value={settings.defaultDuration}
-            onChange={(event) =>
-              onChange("defaultDuration", Number(event.target.value))
-            }
-          >
-            <option value="15">15 minutes</option>
-            <option value="30">30 minutes</option>
-            <option value="60">60 minutes</option>
-            <option value="90">90 minutes</option>
-          </select>
-        </label>
-      </div>
-      <div className={styles.dataActions}>
-        <div>
-          <h3>Your data</h3>
-          <p>Everything is stored locally in this browser.</p>
-        </div>
-        <div>
-          <button className={styles.outlineButton} onClick={onExport}>
-            Export JSON
-          </button>
-          <label className={styles.importButton}>
-            Import JSON
-            <input
-              type="file"
-              accept="application/json"
-              onChange={(event) => {
-                const file = event.target.files?.[0];
-                if (!file) return;
-                file.text().then((text) => {
-                  try {
-                    const parsed = JSON.parse(text);
-                    if (
-                      !Array.isArray(parsed.todos) ||
-                      !Array.isArray(parsed.categories)
-                    )
-                      throw new Error("Invalid backup");
-                    onImport({
-                      todos: parsed.todos,
-                      categories: parsed.categories,
-                    });
-                  } catch {
-                    window.alert("Invalid backup file");
-                  }
-                });
-              }}
-            />
-          </label>
-          <button className={styles.dangerButton} onClick={onClear}>
-            Clear my data
-          </button>
-        </div>
-      </div>
-    </section>
   );
 }

@@ -1,27 +1,40 @@
 import type { AppData, Category, Settings } from "./todo-types";
+import { parseBackup } from "./todo-validation";
 
 export const DATA_KEY = "datkrbus-todo-app";
 export const SESSION_KEY = "datkrbus-todo-session";
+let loadedSnapshot: string | null | undefined;
 
-export const defaultCategories = (userId: string): Category[] => [
+export class StorageConflictError extends Error {
+  constructor() {
+    super(
+      "Another tab changed this workspace. Export your current changes, then reload to use the latest saved data.",
+    );
+  }
+}
+
+export const defaultCategories = (
+  userId: string,
+  locale: "vi" | "en" = "vi",
+): Category[] => [
   {
     id: crypto.randomUUID(),
     userId,
-    name: "Personal",
+    name: locale === "en" ? "Personal" : "Cá nhân",
     color: "#e76f8f",
     icon: "●",
   },
   {
     id: crypto.randomUUID(),
     userId,
-    name: "Work",
-    color: "#2a9d8f",
+    name: locale === "en" ? "Work" : "Công việc",
+    color: "#2457a6",
     icon: "◆",
   },
   {
     id: crypto.randomUUID(),
     userId,
-    name: "Study",
+    name: locale === "en" ? "Study" : "Học tập",
     color: "#f28482",
     icon: "▲",
   },
@@ -46,35 +59,39 @@ export const emptyData: AppData = {
 };
 
 export function loadData(): AppData {
-  try {
-    const raw = window.localStorage.getItem(DATA_KEY);
-    if (!raw) return emptyData;
-    const parsed = JSON.parse(raw) as Partial<AppData>;
-    return {
-      users: Array.isArray(parsed.users) ? parsed.users : [],
-      categories: Array.isArray(parsed.categories) ? parsed.categories : [],
-      todos: Array.isArray(parsed.todos)
-        ? parsed.todos.map((todo) => ({
-            ...todo,
-            tags: Array.isArray(todo.tags) ? todo.tags : [],
-            subtasks: Array.isArray(todo.subtasks) ? todo.subtasks : [],
-            priority: todo.priority || "none",
-          }))
-        : [],
-      settings: Array.isArray(parsed.settings)
-        ? parsed.settings.map((settings) => ({
-            ...settings,
-            theme: settings.theme === "dark" ? "dark" : "light",
-          }))
-        : [],
-    };
-  } catch {
-    return emptyData;
+  const raw = window.localStorage.getItem(DATA_KEY);
+  if (!raw) {
+    loadedSnapshot = raw;
+    return { users: [], categories: [], todos: [], settings: [] };
   }
+  const parsed = JSON.parse(raw) as Partial<AppData>;
+  if (
+    !parsed ||
+    !Array.isArray(parsed.users) ||
+    !parsed.users.every(
+      (user) =>
+        user &&
+        typeof user.id === "string" &&
+        typeof user.username === "string" &&
+        typeof user.password === "string",
+    )
+  )
+    throw new Error("Invalid saved workspace.");
+  const backup = parseBackup(parsed);
+  loadedSnapshot = raw;
+  return {
+    users: parsed.users,
+    ...backup,
+  };
 }
 
 export function saveData(data: AppData) {
-  window.localStorage.setItem(DATA_KEY, JSON.stringify(data));
+  const raw = window.localStorage.getItem(DATA_KEY);
+  if (loadedSnapshot !== undefined && loadedSnapshot !== raw)
+    throw new StorageConflictError();
+  const serialized = JSON.stringify({ version: 1, ...data });
+  if (raw !== serialized) window.localStorage.setItem(DATA_KEY, serialized);
+  loadedSnapshot = serialized;
 }
 
 export function getSession() {

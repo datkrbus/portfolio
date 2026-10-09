@@ -59,6 +59,7 @@ export type Todo = {
   completedAt?: string;
   reminder?: Reminder;
   recurrence?: Recurrence;
+  recurrenceSourceId?: string;
   deadline: string;
   tags: string[];
   subtasks: Subtask[];

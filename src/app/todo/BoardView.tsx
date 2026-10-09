@@ -1,53 +1,51 @@
 "use client";
-
-import { FormEvent, useMemo, useState } from "react";
-import styles from "./todo.module.css";
+import { useI18n } from "./I18nProvider";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import type { Category, Todo, TodoStatus } from "./todo-types";
-
-const columns: Array<{ id: TodoStatus; label: string }> = [
-  { id: "todo", label: "Việc cần làm" },
-  { id: "in_progress", label: "Đang thực hiện" },
-  { id: "review", label: "Đang xem xét" },
-  { id: "done", label: "Hoàn tất" },
-];
-const priorityLabels = {
-  none: "",
-  low: "Low",
-  medium: "Medium",
-  high: "High",
-} as const;
-
+import {
+  groupTodos,
+  statusFor,
+  statusLabels,
+  priorityLabel,
+  today,
+} from "./todo-utils";
+import TaskActions from "./TaskActions";
+import Icon from "./Icon";
+import styles from "./todo.module.css";
 export default function BoardView({
   todos,
   categories,
   categoryFilter,
-  onCategoryFilterChange,
   onOpen,
   onToggle,
+  onCopy,
+  onDelete,
   onMove,
   onCreate,
 }: {
   todos: Todo[];
   categories: Category[];
+  categoryFilter: string;
   onOpen: (todo: Todo) => void;
   onToggle: (todo: Todo) => void;
+  onCopy: (todo: Todo) => void;
+  onDelete: (id: string) => void;
   onMove: (todo: Todo, status: TodoStatus) => void;
-  categoryFilter: string;
-  onCategoryFilterChange: (categoryId: string) => void;
-  onCreate: (title: string, status: TodoStatus, categoryId: string) => void;
+  onCreate: (title: string, status: TodoStatus, category: string) => void;
 }) {
+  const { t, relativeDate } = useI18n();
   const [addingTo, setAddingTo] = useState<TodoStatus | null>(null);
   const [newTitle, setNewTitle] = useState("");
-  const filteredTodos = useMemo(
-    () =>
-      categoryFilter === "all"
-        ? todos
-        : todos.filter((todo) => todo.categoryId === categoryFilter),
-    [categoryFilter, todos],
+  const [dragOver, setDragOver] = useState<TodoStatus | null>(null);
+  const input = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (addingTo) input.current?.focus();
+  }, [addingTo]);
+  const groups = useMemo(() => groupTodos(todos, statusFor), [todos]);
+  const categoryMap = useMemo(
+    () => new Map(categories.map((item) => [item.id, item])),
+    [categories],
   );
-  const statusFor = (todo: Todo): TodoStatus =>
-    todo.status || (todo.completed ? "done" : "todo");
-
   function submit(event: FormEvent, status: TodoStatus) {
     event.preventDefault();
     if (!newTitle.trim()) return;
@@ -55,163 +53,193 @@ export default function BoardView({
     setNewTitle("");
     setAddingTo(null);
   }
-
   return (
-    <section className={styles.board} aria-label="Todo board">
-      <div className={styles.boardToolbar}>
-        <span className={styles.boardToolbarLabel}>Board</span>
-        <label className={styles.boardFilter}>
-          Category
-          <select
-            value={categoryFilter}
-            onChange={(event) => onCategoryFilterChange(event.target.value)}
-          >
-            <option value="all">All categories</option>
-            {categories.map((category) => (
-              <option value={category.id} key={category.id}>
-                {category.name}
-              </option>
-            ))}
-          </select>
-        </label>
-      </div>
+    <section className={styles.board} aria-label={t("Bảng công việc")}>
       <div className={styles.boardColumns}>
-        {columns.map((column) => {
-          const columnTodos = filteredTodos.filter(
-            (todo) => statusFor(todo) === column.id,
-          );
-          return (
-            <div
-              className={styles.boardColumn}
-              key={column.id}
-              onDragOver={(event) => event.preventDefault()}
-              onDrop={(event) => {
-                const todo = todos.find(
-                  (item) => item.id === event.dataTransfer.getData("todo"),
-                );
-                if (todo) onMove(todo, column.id);
-              }}
-            >
-              <header className={styles.boardHeader}>
-                <div className={styles.boardHeaderTitle}>
-                  <span
-                    className={`${styles.statusDot} ${styles[`status${column.id.replace("_", "_").replace(/^./, (letter) => letter.toUpperCase())}`]}`}
-                  />
-                  <strong>{column.label}</strong>
-                  <span className={styles.boardCount}>
-                    {columnTodos.length}
-                  </span>
-                </div>
-                {addingTo === column.id ? (
+        {(Object.entries(statusLabels) as [TodoStatus, string][]).map(
+          ([status, label]) => {
+            const tasks = groups.get(status) || [];
+            return (
+              <section
+                key={status}
+                aria-label={t(label)}
+                data-status={status}
+                className={`${styles.boardColumn} ${dragOver === status ? styles.dropTarget : ""}`}
+                onDragOver={(event) => {
+                  event.preventDefault();
+                  setDragOver(status);
+                }}
+                onDragLeave={(event) => {
+                  if (
+                    !event.currentTarget.contains(event.relatedTarget as Node)
+                  )
+                    setDragOver(null);
+                }}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  setDragOver(null);
+                  const todo = todos.find(
+                    (item) => item.id === event.dataTransfer.getData("todo"),
+                  );
+                  if (todo && statusFor(todo) !== status) onMove(todo, status);
+                }}
+              >
+                <header className={styles.boardHeader}>
+                  <span className={styles.statusDot} />
+                  <h3>{t(label)}</h3>
+                  <span className={styles.boardCount}>{tasks.length}</span>
+                  <button
+                    className={styles.iconButton}
+                    aria-label={t("Thêm vào {0}", { "0": t(label) })}
+                    onClick={() => {
+                      setAddingTo(status);
+                      setNewTitle("");
+                    }}
+                  >
+                    <Icon name="plus" size={17} />
+                  </button>
+                </header>
+                {addingTo === status && (
                   <form
                     className={styles.inlineTaskForm}
-                    onSubmit={(event) => submit(event, column.id)}
+                    onSubmit={(event) => submit(event, status)}
                   >
                     <input
-                      autoFocus
+                      ref={input}
+                      aria-label={t("Công việc mới trong {0}", {
+                        "0": t(label),
+                      })}
+                      placeholder={t("Tên công việc...")}
                       value={newTitle}
+                      maxLength={300}
                       onChange={(event) => setNewTitle(event.target.value)}
-                      placeholder="Task name"
                       onKeyDown={(event) => {
-                        if (event.key === "Escape") {
-                          setAddingTo(null);
-                          setNewTitle("");
-                        }
+                        if (event.key === "Escape") setAddingTo(null);
                       }}
                     />
-                    <button aria-label="Create task">+</button>
-                  </form>
-                ) : (
-                  <button
-                    className={styles.boardAddTop}
-                    onClick={() => setAddingTo(column.id)}
-                  >
-                    + New task
-                  </button>
-                )}
-              </header>
-              <div className={styles.boardCards}>
-                {columnTodos.map((todo) => {
-                  const category = categories.find(
-                    (item) => item.id === todo.categoryId,
-                  );
-                  const isDone = statusFor(todo) === "done";
-                  const subtasks = Array.isArray(todo.subtasks)
-                    ? todo.subtasks
-                    : [];
-                  const priorityClass =
-                    `priorityCard${todo.priority.charAt(0).toUpperCase()}${todo.priority.slice(1)}` as keyof typeof styles;
-                  return (
-                    <article
-                      className={`${styles.boardCard} ${styles[priorityClass]} ${isDone ? styles.boardCardDone : ""}`}
-                      draggable
-                      key={todo.id}
-                      onDragStart={(event) =>
-                        event.dataTransfer.setData("todo", todo.id)
-                      }
-                    >
+                    <div>
                       <button
-                        className={styles.boardCardBody}
-                        onClick={() => onOpen(todo)}
+                        type="button"
+                        className={styles.textButton}
+                        onClick={() => setAddingTo(null)}
                       >
-                        <strong>{todo.title}</strong>
-                        <span>
-                          {todo.date}
-                          {category && (
-                            <>
+                        {t("Hủy")}
+                      </button>
+                      <button
+                        className={styles.primaryButton}
+                        disabled={!newTitle.trim()}
+                      >
+                        {t("Thêm")}
+                      </button>
+                    </div>
+                  </form>
+                )}
+                <div className={styles.boardCards}>
+                  {tasks.map((todo) => {
+                    const category = categoryMap.get(todo.categoryId);
+                    const done = todo.completed;
+                    const overdue =
+                      !done && todo.deadline && todo.deadline < today();
+                    const completed = todo.subtasks.filter(
+                      (item) => item.completed,
+                    ).length;
+                    return (
+                      <article
+                        key={todo.id}
+                        className={`${styles.boardCard} ${done ? styles.boardCardDone : ""}`}
+                        draggable
+                        onDragStart={(event) => {
+                          event.dataTransfer.setData("todo", todo.id);
+                          event.dataTransfer.effectAllowed = "move";
+                        }}
+                        onDragEnd={() => setDragOver(null)}
+                      >
+                        <div className={styles.cardTop}>
+                          {category ? (
+                            <span className={styles.categoryBadge}>
                               <i style={{ background: category.color }} />
                               {category.name}
-                            </>
+                            </span>
+                          ) : (
+                            <span />
                           )}
-                          {priorityLabels[todo.priority] && (
-                            <b className={styles.priorityMeta}>
-                              {priorityLabels[todo.priority]}
-                            </b>
-                          )}
-                        </span>
-                        {subtasks.length > 0 && (
-                          <span className={styles.boardSubtasks}>
-                            {subtasks.slice(0, 3).map((subtask) => (
-                              <span
-                                key={subtask.id}
-                                className={
-                                  subtask.completed
-                                    ? styles.boardSubtaskDone
-                                    : ""
-                                }
-                              >
-                                <i>{subtask.completed ? "✓" : "·"}</i>
-                                {subtask.title}
-                              </span>
-                            ))}
-                            {subtasks.length > 3 && (
-                              <small>+{subtasks.length - 3} more</small>
-                            )}
-                          </span>
+                          <TaskActions
+                            todo={todo}
+                            onOpen={onOpen}
+                            onCopy={onCopy}
+                            onDelete={onDelete}
+                            onMove={onMove}
+                          />
+                        </div>
+                        <button
+                          className={styles.boardCardBody}
+                          onClick={() => onOpen(todo)}
+                        >
+                          <strong>{todo.title}</strong>
+                          {todo.description && <p>{todo.description}</p>}
+                        </button>
+                        {todo.subtasks.length > 0 && (
+                          <div className={styles.subtaskProgress}>
+                            <div
+                              role="progressbar"
+                              aria-label={t("Tiến độ việc con")}
+                              aria-valuenow={completed}
+                              aria-valuemax={todo.subtasks.length}
+                              aria-valuemin={0}
+                            >
+                              <i
+                                style={{
+                                  width: `${(completed / todo.subtasks.length) * 100}%`,
+                                }}
+                              />
+                            </div>
+                            <small>
+                              {completed}/{todo.subtasks.length} {t("việc con")}
+                            </small>
+                          </div>
                         )}
-                      </button>
-                      <button
-                        className={styles.boardCompleteButton}
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          onToggle(todo);
-                        }}
-                        title={
-                          isDone ? "Mark task active" : "Mark task complete"
-                        }
-                        aria-label={
-                          isDone ? "Mark task active" : "Mark task complete"
-                        }
-                      >
-                        {isDone ? "✓" : "○"}
-                      </button>
-                    </article>
-                  );
-                })}
-              </div>
-            </div>
-          );
-        })}
+                        <footer className={styles.cardFooter}>
+                          <span className={overdue ? styles.overdueText : ""}>
+                            <Icon name="calendar" size={14} />
+                            {overdue ? t("Quá hạn") : relativeDate(todo.date)}
+                          </span>
+                          {todo.priority !== "none" && (
+                            <span
+                              className={`${styles.priority} ${styles[`priority${todo.priority}`]}`}
+                            >
+                              {t(priorityLabel[todo.priority])}
+                            </span>
+                          )}
+                          <button
+                            className={`${styles.completeButton} ${done ? styles.checked : ""}`}
+                            aria-label={t(
+                              done ? "Mở lại: {0}" : "Hoàn thành: {0}",
+                              { "0": todo.title },
+                            )}
+                            aria-pressed={done}
+                            onClick={() => onToggle(todo)}
+                          >
+                            {done && <Icon name="check" size={14} />}
+                          </button>
+                        </footer>
+                      </article>
+                    );
+                  })}
+                </div>
+                {!tasks.length && !addingTo && (
+                  <button
+                    className={styles.columnEmpty}
+                    onClick={() => setAddingTo(status)}
+                  >
+                    <Icon name="plus" size={20} />
+                    <span>{t("Thêm công việc")}</span>
+                    <small>{t("hoặc kéo công việc vào đây")}</small>
+                  </button>
+                )}
+              </section>
+            );
+          },
+        )}
       </div>
     </section>
   );

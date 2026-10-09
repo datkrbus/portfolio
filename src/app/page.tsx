@@ -1,3 +1,4 @@
+import "./portfolio-fonts.css";
 import { MeshGradient } from '@/components/effects/MeshGradient';
 import { CursorGlow } from '@/components/effects/CursorGlow';
 import { ScrollReveal } from '@/components/effects/ScrollReveal';
