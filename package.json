@@ -12,7 +12,7 @@
     "format:check": "prettier --check \"src/app/todo/**/*.{ts,tsx,css}\" \"tests/*.cjs\" \"scripts/*.cjs\""
   },
   "dependencies": {
-    "next": "16.4.0",
+    "next": "16.4.6",
     "react": "19.2.4",
     "react-dom": "19.2.4"
   },

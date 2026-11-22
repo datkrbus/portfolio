@@ -1,0 +1,475 @@
+.page {
+  --ink: #f3ead7;
+  --muted: #b7aa90;
+  --gold: #d8b46a;
+  --gold-soft: rgb(216 180 106 / 18%);
+  --night: #120e1f;
+  --panel: #1e1832;
+  --deck-w: clamp(120px, 34vw, 180px);
+  --mini-w: clamp(84px, 24vw, 128px);
+  min-height: 100dvh;
+  padding: 24px 16px 32px;
+  color: var(--ink);
+  background:
+    radial-gradient(ellipse at 50% -10%, #3a2b5c 0%, transparent 60%),
+    radial-gradient(ellipse at 100% 100%, #2a1f3f 0%, transparent 55%),
+    var(--night);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 28px;
+  color-scheme: dark;
+  font-family: "Noto Serif", "Times New Roman", serif;
+}
+
+.header {
+  width: 100%;
+  max-width: 960px;
+  text-align: center;
+  position: relative;
+}
+.title {
+  font-size: clamp(26px, 5vw, 36px);
+  font-weight: 400;
+  letter-spacing: 0.08em;
+  color: var(--gold);
+  margin-top: 8px;
+}
+
+/* ---------- Bộ bài ---------- */
+.deckArea {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+.deckDrop {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  border-radius: 16px;
+  transition: filter 0.2s;
+}
+.deckDrop[data-over] {
+  filter: drop-shadow(0 0 18px rgb(216 180 106 / 45%));
+}
+
+/* Mặc định: một chồng bài */
+.stack {
+  position: relative;
+  width: var(--deck-w);
+  aspect-ratio: 7 / 12;
+  border: 0;
+  padding: 0;
+  background: none;
+  cursor: pointer;
+  touch-action: none;
+  transition: transform 0.25s ease;
+}
+.stack:not(:disabled):hover {
+  transform: translateY(-4px);
+}
+.stack:disabled {
+  cursor: default;
+  width: var(--deck-w);
+  border: 1px dashed rgb(216 180 106 / 25%);
+  border-radius: 12px;
+}
+.stackCard {
+  position: absolute;
+  inset: 0;
+}
+
+/* Khi xòe: tràn hết bề ngang màn hình, lướt ngang qua lại */
+.fanScroller {
+  --fan-w: clamp(96px, 26vw, 132px);
+  --fan-h: calc(var(--fan-w) * 12 / 7);
+  --step: clamp(30px, 8vw, 40px);
+  --curve: 36px;
+  --tilt: 16deg;
+  flex: none;
+  width: 100vw;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  animation: fanOpen 0.45s ease-out;
+}
+.fanScroller::-webkit-scrollbar {
+  display: none;
+}
+@keyframes fanOpen {
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+}
+.fanTrack {
+  position: relative;
+  /* thêm nửa màn hình mỗi bên để lá đầu/cuối cũng lướt được vào giữa */
+  width: calc(
+    (var(--n) - 1) * var(--step) + var(--fan-w) + 100vw - var(--fan-w)
+  );
+  height: calc(var(--fan-h) + var(--curve) * 2 + 40px);
+  margin: 0 auto;
+}
+.fanCard {
+  --t: 0;
+  position: absolute;
+  left: calc(50vw - var(--fan-w) / 2 + var(--i) * var(--step));
+  top: 30px;
+  width: var(--fan-w);
+  aspect-ratio: 7 / 12;
+  padding: 0;
+  cursor: grab;
+  touch-action: pan-x;
+  transform-origin: 50% 100%;
+  transform: translateY(calc(var(--t) * var(--t) * var(--curve)))
+    rotate(calc(var(--t) * var(--tilt)));
+  translate: 0 var(--lift, 0px);
+  transition:
+    translate 0.2s ease,
+    left 0.3s ease;
+}
+@media (hover: hover) {
+  .fanCard:hover {
+    --lift: -22px;
+  }
+}
+.fanCard:focus-visible {
+  --lift: -22px;
+}
+
+/* Bản sao nổi theo ngón tay khi kéo */
+.ghost.ghost {
+  position: fixed;
+  z-index: 1000;
+  margin: 0;
+  transform: none;
+  animation: none;
+  pointer-events: none;
+  scale: 1.06;
+  filter: drop-shadow(0 16px 24px rgb(0 0 0 / 55%));
+}
+
+.fanCard:focus-visible,
+.drawn:focus-visible,
+.ghostBtn:focus-visible,
+.close:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 4px;
+}
+.cardBack {
+  display: block;
+  border-radius: 10px;
+  border: 1px solid rgb(216 180 106 / 55%);
+  box-shadow: 0 8px 20px rgb(0 0 0 / 45%);
+  background:
+    radial-gradient(
+      circle at 50% 50%,
+      transparent 0 18%,
+      var(--gold) 18.5% 19.5%,
+      transparent 20%
+    ),
+    radial-gradient(
+      circle at 50% 50%,
+      var(--gold-soft) 0 12%,
+      transparent 12.5%
+    ),
+    repeating-linear-gradient(
+      45deg,
+      transparent 0 10px,
+      rgb(216 180 106 / 10%) 10px 11px
+    ),
+    repeating-linear-gradient(
+      -45deg,
+      transparent 0 10px,
+      rgb(216 180 106 / 10%) 10px 11px
+    ),
+    linear-gradient(160deg, #2c2150, #171128);
+  outline: 1px solid rgb(216 180 106 / 30%);
+  outline-offset: -6px;
+}
+.deckHint {
+  color: var(--muted);
+  font:
+    13px/1.4 system-ui,
+    sans-serif;
+}
+
+/* ---------- Các lá đã bốc ---------- */
+.spread {
+  width: 100%;
+  max-width: 960px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+}
+.zone {
+  width: 100%;
+  min-height: calc(var(--mini-w) * 12 / 7 + 32px);
+  padding: 16px;
+  border: 1px dashed rgb(216 180 106 / 22%);
+  border-radius: 16px;
+  transition:
+    background 0.2s,
+    border-color 0.2s;
+}
+.zone[data-over] {
+  background: var(--gold-soft);
+  border-color: rgb(216 180 106 / 70%);
+}
+.drawn:not([data-flipped]) {
+  touch-action: none;
+  cursor: grab;
+}
+.drawn {
+  transition: translate 0.3s ease;
+}
+.spreadGrid {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: clamp(10px, 3vw, 18px);
+}
+.drawn {
+  display: block;
+  width: var(--mini-w);
+  aspect-ratio: 7 / 12;
+  border: 0;
+  padding: 0;
+  background: none;
+  cursor: pointer;
+  perspective: 900px;
+  animation: dealIn 0.45s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+@keyframes dealIn {
+  from {
+    opacity: 0;
+    transform: translateY(-60px) scale(0.85);
+  }
+}
+.flipper {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+  transform-style: preserve-3d;
+  transition: transform 0.65s cubic-bezier(0.3, 0.7, 0.2, 1);
+}
+.drawn[data-flipped] .flipper {
+  transform: rotateY(180deg);
+}
+.drawn:hover .flipper {
+  translate: 0 -4px;
+}
+.face {
+  position: absolute;
+  inset: 0;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+.front {
+  transform: rotateY(180deg);
+  border-radius: 10px;
+  overflow: hidden;
+  background: #efe6cf;
+  box-shadow:
+    0 0 0 1px rgb(216 180 106 / 60%),
+    0 10px 24px rgb(0 0 0 / 50%);
+}
+.img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.img[data-reversed],
+.fallback[data-reversed] {
+  transform: rotate(180deg);
+}
+.fallback {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  padding: 8px;
+  color: #3b2d17;
+  font-size: 14px;
+  text-align: center;
+}
+
+.ghostBtn {
+  font:
+    600 13px/1 system-ui,
+    sans-serif;
+  border-radius: 999px;
+  cursor: pointer;
+  min-height: 40px;
+  padding: 0 20px;
+  border: 1px solid rgb(216 180 106 / 40%);
+  background: transparent;
+  color: var(--ink);
+}
+.ghostBtn:hover {
+  background: var(--gold-soft);
+}
+
+/* ---------- Hộp ý nghĩa ---------- */
+.dialog {
+  margin: auto;
+  padding: 0;
+  border: 1px solid rgb(216 180 106 / 30%);
+  border-radius: 16px;
+  background: var(--panel, #1e1832);
+  color: var(--ink, #f3ead7);
+  width: min(720px, calc(100% - 32px));
+  max-height: calc(100dvh - 48px);
+  overflow: auto;
+  font-family: "Noto Serif", "Times New Roman", serif;
+  color-scheme: dark;
+}
+.dialog::backdrop {
+  background: rgb(8 6 16 / 72%);
+  backdrop-filter: blur(3px);
+}
+.dialog[open] {
+  animation: pop 0.3s ease-out;
+}
+@keyframes pop {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.98);
+  }
+}
+.meaningCard {
+  position: relative;
+  display: grid;
+  grid-template-columns: 200px 1fr;
+  gap: 24px;
+  padding: 28px;
+}
+.dialogImg {
+  aspect-ratio: 7 / 12;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #efe6cf;
+  box-shadow: 0 0 0 1px rgb(216 180 106 / 60%);
+}
+.close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 40px;
+  height: 40px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--muted);
+  font:
+    28px/1 system-ui,
+    sans-serif;
+  cursor: pointer;
+}
+.close:hover {
+  color: var(--ink);
+  background: var(--gold-soft);
+}
+.cardName {
+  font-size: clamp(22px, 5vw, 30px);
+  font-weight: 400;
+  margin: 2px 40px 14px 0;
+  line-height: 1.2;
+}
+.cardName span {
+  display: block;
+  margin-top: 6px;
+  color: var(--gold);
+  font:
+    600 12px/1.4 system-ui,
+    sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+}
+.meaningText {
+  font-size: 17px;
+  line-height: 1.7;
+}
+.cite {
+  margin-top: 8px;
+  color: var(--muted);
+  font:
+    13px/1.4 system-ui,
+    sans-serif;
+}
+.other {
+  margin-top: 16px;
+  font:
+    14px/1.6 system-ui,
+    sans-serif;
+  color: var(--muted);
+}
+.other summary {
+  cursor: pointer;
+  color: var(--ink);
+}
+.other p {
+  margin-top: 6px;
+}
+
+/* Điện thoại: hộp ý nghĩa thành bottom sheet */
+@media (max-width: 599px) {
+  .dialog {
+    width: 100%;
+    max-width: 100%;
+    margin: 0;
+    inset: auto 0 0 0;
+    border-radius: 18px 18px 0 0;
+    border-bottom: 0;
+    max-height: 88dvh;
+  }
+  .dialog[open] {
+    animation: sheetUp 0.3s ease-out;
+  }
+  .meaningCard {
+    grid-template-columns: 1fr;
+    gap: 16px;
+    padding: 20px 16px calc(24px + env(safe-area-inset-bottom));
+  }
+  .dialogImg {
+    width: 120px;
+    justify-self: center;
+  }
+}
+@keyframes sheetUp {
+  from {
+    transform: translateY(100%);
+  }
+}
+
+.footer {
+  max-width: 680px;
+  text-align: center;
+  color: var(--muted);
+  font:
+    12px/1.6 system-ui,
+    sans-serif;
+  margin-top: auto;
+}
+.footer a {
+  color: var(--gold);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .drawn,
+  .fanScroller,
+  .dialog[open] {
+    animation: none;
+  }
+  .flipper,
+  .stack {
+    transition: none;
+  }
+}

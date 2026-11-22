@@ -1,38 +1,9 @@
-import "./portfolio-fonts.css";
-import { MeshGradient } from '@/components/effects/MeshGradient';
-import { CursorGlow } from '@/components/effects/CursorGlow';
-import { ScrollReveal } from '@/components/effects/ScrollReveal';
-import { CardTilt } from '@/components/effects/CardTilt';
-import { Navbar } from '@/components/layout/Navbar';
-import { HeroSection } from '@/components/sections/HeroSection';
-import { AboutSection } from '@/components/sections/AboutSection';
-import { ProjectsSection } from '@/components/sections/ProjectsSection';
-import { SkillsSection } from '@/components/sections/SkillsSection';
-import { EducationSection } from '@/components/sections/EducationSection';
-import { ContactSection } from '@/components/sections/ContactSection';
-import { Footer } from '@/components/layout/Footer';
+import type { Metadata } from "next";
+import { notFound } from "next/navigation";
+
+// Trang portfolio đang ẩn — xem src/app/_portfolio/README.md để bật lại.
+export const metadata: Metadata = { robots: { index: false, follow: false } };
 
 export default function Home() {
-  return (
-    <>
-      <MeshGradient />
-      <CursorGlow />
-      <Navbar />
-
-      <main>
-        <ScrollReveal>
-          <CardTilt>
-            <HeroSection />
-            <AboutSection />
-            <ProjectsSection />
-            <SkillsSection />
-            <EducationSection />
-            <ContactSection />
-          </CardTilt>
-        </ScrollReveal>
-      </main>
-
-      <Footer />
-    </>
-  );
+  notFound();
 }
