@@ -132,10 +132,19 @@ export default function TarotApp() {
     const mid = s.scrollLeft + s.clientWidth / 2;
     const half = Math.max(s.clientWidth / 2, 1);
     const track = s.firstElementChild as HTMLElement | null;
-    for (const el of Array.from(track?.children ?? []) as HTMLElement[]) {
-      const u = (el.offsetLeft + el.offsetWidth / 2 - mid) / half;
-      el.style.setProperty("--t", Math.max(-1.4, Math.min(1.4, u)).toFixed(3));
-    }
+    const cards = Array.from(track?.children ?? []) as HTMLElement[];
+    // Đọc hết vị trí trước rồi mới ghi, tránh ép trình duyệt tính lại layout
+    // sau mỗi lá (layout thrashing).
+    const centers = cards.map((el) => el.offsetLeft + el.offsetWidth / 2);
+    cards.forEach((el, i) => {
+      const u = (centers[i] - mid) / half;
+      const t = Math.max(-1.4, Math.min(1.4, u)).toFixed(2);
+      // Lá ở xa ngoài màn hình đã bị kẹp ở ±1.4 → không ghi lại nếu không đổi.
+      if (el.dataset.t !== t) {
+        el.dataset.t = t;
+        el.style.setProperty("--t", t);
+      }
+    });
   };
   const onFanScroll = () => {
     cancelAnimationFrame(arcFrame.current);
